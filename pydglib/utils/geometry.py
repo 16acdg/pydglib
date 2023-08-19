@@ -6,6 +6,23 @@ def _is_valid_vertex(v: np.ndarray) -> bool:
     return isinstance(v, np.ndarray) and len(v.shape) == 1 and v.shape[0] == 2
 
 
+def is_valid_triangle(v1: np.ndarray, v2: np.ndarray, v3: np.ndarray) -> bool:
+    """
+    Returns True if the triangle with vertices `v1`, `v2`, `v3` is valid.
+
+    A valid triangle must have valid vertices and the area of the convex hull of  `v1`, `v2`, `v3` must be positive.
+
+    Args:
+        v1 (np.ndarray): First vertex of the triangle.
+        v2 (np.ndarray): Second vertex of the triangle.
+        v3 (np.ndarray): Third vertex of the triangle.
+
+    Returns:
+        bool: True if valid, False otherwise.
+    """
+    return get_area_of_triangle(v1, v2, v3) > 0
+
+
 def get_area_of_triangle(v1: np.ndarray, v2: np.ndarray, v3: np.ndarray) -> float:
     """
     Returns the surface area of the triangle with vertices `v1`, `v2`, `v3`.

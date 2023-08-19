@@ -3,6 +3,7 @@ from scipy.spatial import Delaunay
 import pytest
 
 from pydglib.utils.geometry import (
+    is_valid_triangle,
     get_area_of_triangle,
     get_perimeter_of_triangle,
     get_outward_unit_normals_of_triangle,
@@ -43,6 +44,48 @@ VALID_TRIANGLES = [
         np.array([-1, -2 / 3]) / np.linalg.norm(np.array([1, 2 / 3])),
     ),
 ]
+
+
+class TestIsValidTriangle:
+    triangles_with_overlapping_vertices = [
+        (np.array([0.5, 0.5]), np.array([0.5, 0.5]), np.array([0.5, 0.5])),
+        (np.array([0.0, 0.0]), np.array([0.0, 0.0]), np.array([0.5, 1.0])),
+        (np.array([0.0, 0.0]), np.array([1.0, 0.0]), np.array([0.0, 0.0])),
+        (np.array([0.0, 0.0]), np.array([1.0, 0.0]), np.array([1.0, 0.0])),
+    ]
+
+    @pytest.mark.parametrize("v1,v2,v3", triangles_with_overlapping_vertices)
+    def test_returns_false_when_vertices_overlap(self, v1, v2, v3):
+        assert not is_valid_triangle(v1, v2, v3)
+        assert not is_valid_triangle(v1, v3, v2)
+        assert not is_valid_triangle(v2, v1, v3)
+        assert not is_valid_triangle(v3, v1, v2)
+        assert not is_valid_triangle(v2, v3, v1)
+        assert not is_valid_triangle(v3, v2, v1)
+
+    triangles_with_colinear_vertices = [
+        (np.array([-0.5, -0.5]), np.array([0.5, 0.5]), np.array([1.5, 1.5]))
+    ]
+
+    @pytest.mark.parametrize("v1,v2,v3", triangles_with_colinear_vertices)
+    def test_returns_false_when_vertices_distinct_but_colinear(self, v1, v2, v3):
+        assert not is_valid_triangle(v1, v2, v3)
+        assert not is_valid_triangle(v1, v3, v2)
+        assert not is_valid_triangle(v2, v1, v3)
+        assert not is_valid_triangle(v3, v1, v2)
+        assert not is_valid_triangle(v2, v3, v1)
+        assert not is_valid_triangle(v3, v2, v1)
+
+    @pytest.mark.parametrize("v1,v2,v3,area,perimeter,n1,n2,n3", VALID_TRIANGLES)
+    def test_returns_true_when_vertices_distinct_and_not_colinear(
+        self, v1, v2, v3, area, perimeter, n1, n2, n3
+    ):
+        assert is_valid_triangle(v1, v2, v3)
+        assert is_valid_triangle(v1, v3, v2)
+        assert is_valid_triangle(v2, v1, v3)
+        assert is_valid_triangle(v3, v1, v2)
+        assert is_valid_triangle(v2, v3, v1)
+        assert is_valid_triangle(v3, v2, v1)
 
 
 class TestGetAreaOfTriangle:
