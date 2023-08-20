@@ -218,3 +218,21 @@ class TestGetNodes2D:
             ]
         )
         assert np.allclose(nodes, nodes_correct)
+
+    def test_returns_boundary_node_indicies_if_include_boundary_True(self):
+        degree = 5
+        nodes, b1, b2, b3 = get_nodes_2d(degree, include_boundary=True)
+        n_nodes = nodes.shape[0]
+        assert len(b1) == degree + 1
+        assert len(b2) == degree + 1
+        assert len(b2) == degree + 1
+        for i in range(len(b1)):
+            assert isinstance(b1[i], np.integer) and 0 <= b1[i] < n_nodes
+            assert isinstance(b2[i], np.integer) and 0 <= b2[i] < n_nodes
+            assert isinstance(b3[i], np.integer) and 0 <= b3[i] < n_nodes
+
+        # Test there are 3 corner nodes that appear in exactly two of b1, b2, b3,
+        # and all other boundary nodes appear in exactly one of b1, b2, b3.
+        assert len(set(b1) & set(b2)) == 1
+        assert len(set(b2) & set(b3)) == 1
+        assert len(set(b3) & set(b1)) == 1

@@ -102,7 +102,7 @@ def warpfactor(degree: int, rout: np.ndarray) -> np.ndarray:
     return warp
 
 
-def get_nodes_2d(degree: int) -> np.ndarray:
+def get_nodes_2d(degree: int, include_boundary: bool = False) -> np.ndarray:
     alpha = _get_alpha_opt(degree)
 
     n_nodes = int(0.5 * (degree + 1) * (degree + 2))
@@ -141,6 +141,23 @@ def get_nodes_2d(degree: int) -> np.ndarray:
     nodes[:, 0] += warp1 + np.cos(2 * np.pi / 3) * warp2 + np.cos(4 * np.pi / 3) * warp3
     nodes[:, 1] += np.sin(2 * np.pi / 3) * warp2 + np.sin(4 * np.pi / 3) * warp3
 
+    # Get indicies of nodes that are on boundaries
+    if include_boundary:
+        b1 = []
+        b2 = []
+        b3 = []
+        for i in range(n_nodes):
+            if np.isclose(L1[i], 0):
+                b1.append(i)
+            if np.isclose(L2[i], 0):
+                b2.append(i)
+            if np.isclose(L3[i], 0):
+                b3.append(i)
+        b3.reverse()
+        b1 = np.array(b1)
+        b2 = np.array(b2)
+        b3 = np.array(b3)
+
     # Vertices of the equilateral triangle
     v1 = np.array([-1, -1 / np.sqrt(3)])
     v2 = np.array([1, -1 / np.sqrt(3)])
@@ -149,4 +166,7 @@ def get_nodes_2d(degree: int) -> np.ndarray:
     # Map nodes to computational domain
     nodes = physical_to_computational_2d(nodes, v1, v2, v3)
 
-    return nodes
+    if include_boundary:
+        return nodes, b1, b2, b3
+    else:
+        return nodes
