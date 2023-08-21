@@ -1,6 +1,7 @@
 from typing import Tuple
 import numpy as np
 from tqdm import tqdm
+import math
 
 from .grid import Grid1D
 
@@ -47,27 +48,31 @@ def odeint(
         np.ndarray: 3d numpy array of the solution at each time step.
     """
     time = 0  # running time
-    nt = int(final_time / dt) + 1
+    nt = math.ceil(final_time / dt)
 
     # Set shape of storage arrays based on dimensionality of grid state
     if grid.state_dimension == 1:
         resu_shape = (grid.n_elements, grid.n_nodes)
-        soln_shape = (nt, grid.n_nodes, grid.n_elements)
+        soln_shape = (nt + 1, grid.n_nodes, grid.n_elements)
     else:
         resu_shape = (grid.n_elements, grid.state_dimension, grid.n_nodes)
-        soln_shape = (nt, grid.state_dimension, grid.n_nodes, grid.n_elements)
+        soln_shape = (nt + 1, grid.state_dimension, grid.n_nodes, grid.n_elements)
 
     # RK residual storage
-    resu = np.zeros(resu_shape, dtype=np.float64)
+    resu = np.zeros(resu_shape)  # , dtype=np.float64)
 
     # save solution for each time step
-    soln = np.zeros(soln_shape, dtype=np.float64)
+    soln = np.zeros(soln_shape)  # , dtype=np.float64)
 
     # Save initial conditions to solution array
     soln[0] = grid.state
 
     # outer time loop
-    for tstep in tqdm(range(1, nt)):
+    for tstep in tqdm(range(1, nt + 1)):
+        # Shrink the final time step to match the time interval
+        if 0 < final_time - (dt * (tstep - 1)) < dt:
+            dt = final_time - (dt * (tstep - 1))
+
         for INTRK in range(5):
             time_local = time + rk4c[INTRK] * dt
 
