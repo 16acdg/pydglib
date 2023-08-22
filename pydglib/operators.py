@@ -35,89 +35,6 @@ def _get_orthonormal_poly_basis_1d(
     return P, Pr
 
 
-def _make_poly_2d(Legendre, Legendre_deriv, Jacobi, Jacobi_deriv, i):
-    def a(r, s):
-        if s == 1:
-            return -1
-        else:
-            return 2 * (1 + r) / (1 - s) - 1
-
-    def _as(r, s):
-        if s == 1:
-            return 0
-        else:
-            return 2 * (1 + r) / ((1 - s) ** 2)
-
-    def p(r, s):
-        # TODO: I don't think this should be necessary...
-        # if s == 1:
-        #     s -= 0.000001
-        return np.sqrt(2) * Legendre(a(r, s)) * Jacobi(s) * (1 - s) ** i
-
-    # Partial of p wrt r
-    def pr(r, s):
-        out = 2 * np.sqrt(2) * Legendre_deriv(a(r, s)) * Jacobi(s)
-        if i > 0:
-            out *= (1 - s) ** (i - 1)
-        return out
-
-    # Partial of p wrt s
-    def ps(r, s):
-        out = (
-            _as(r, s) * np.sqrt(2) * Legendre_deriv(a(r, s)) * Jacobi(s) * (1 - s) ** i
-            + np.sqrt(2) * Legendre(a(r, s)) * Jacobi_deriv(s) * (1 - s) ** i
-        )
-        if i > 0:
-            out += (
-                np.sqrt(2)
-                * Legendre(a(r, s))
-                * i
-                * Jacobi(s)
-                * (1 - s) ** (i - 1)
-                * (-1)
-            )
-        return out
-
-    return p, pr, ps
-
-
-def _get_orthonormal_poly_basis_2d(
-    degree: int,
-) -> Tuple[List[Polynomial], List[Polynomial], List[Polynomial]]:
-    """
-    Returns a 2d polynomial basis that is orthonormal wrt the reference triangle.
-
-    Args:
-        degree (int): Maximum degree of the basis functions.
-
-    Returns:
-        List[Polynomial]: Orthonormal polynomials.
-        List[Polynomial]: Derivative of polynomials wrt the r direction in computational space.
-        List[Polynomial]: Derivative of polynomials wrt the s direction in computational space.
-    """
-    assert isinstance(degree, int)
-    assert degree >= 0
-
-    P = []
-    Pr = []
-    Ps = []
-
-    for i in range(degree + 1):
-        for j in range(degree + 1):
-            if i + j <= degree:
-                L = legendre(i)
-                dL = legendre_deriv(i)
-                J = jacobi(2 * i + 1, 0, j)
-                dJ = jacobi_deriv(2 * i + 1, 0, j)
-                p, pr, ps = _make_poly_2d(L, dL, J, dJ, i)
-
-                P.append(p)
-                Pr.append(pr)
-                Ps.append(ps)
-
-    return P, Pr, Ps
-
-
 def _get_V(nodes: np.ndarray, P: List[Callable]) -> np.ndarray:
     """
     Returns a Vandermonde matrix defined by V[i,j] = `P`[j](`nodes`[i]).
@@ -196,11 +113,81 @@ def get_LIFT_1d(degree: int) -> np.ndarray:
     return LIFT
 
 
+def rstoab(r, s):
+    n_nodes = len(r)
+    a = np.zeros(n_nodes)
+    for i in range(n_nodes):
+        if s[i] != 1:
+            a[i] = 2 * (1 + r[i]) / (1 - s[i]) - 1
+        else:
+            a[i] = -1
+    b = s
+    return a, b
+
+
+def Simplex2DP(a, b, i, j):
+    h1 = jacobi(0, 0, i)(a)
+    h2 = jacobi(2 * i + 1, 0, j)(b)
+    P = np.sqrt(2) * np.multiply(h1, np.multiply(h2, (1 - b) ** i))
+    return P
+
+
+def Vandermonde2D(N, r, s):
+    n_nodes = int(0.5 * (N + 1) * (N + 2))
+    V2D = np.zeros((len(r), n_nodes))
+    a, b = rstoab(r, s)
+    sk = 0
+    for i in range(N + 1):
+        for j in range(N + 1 - i):
+            V2D[:, sk] = Simplex2DP(a, b, i, j)
+            sk += 1
+    return V2D
+
+
+def GradSimplex2DP(a, b, i, j):
+    fa = jacobi(0, 0, i)(a)
+    gb = jacobi(2 * i + 1, 0, j)(b)
+    dfa = jacobi_deriv(0, 0, i)(a)
+    dgb = jacobi_deriv(2 * i + 1, 0, j)(b)
+
+    # r derivative
+    dmodedr = np.multiply(dfa, gb)
+    if i > 0:
+        dmodedr = np.multiply(dmodedr, (0.5 * (1 - b)) ** (i - 1))
+
+    # s derivative
+    dmodeds = np.multiply(dfa, np.multiply(gb, 0.5 * (1 + a)))
+    if i > 0:
+        dmodeds = np.multiply(dmodeds, (0.5 * (1 - b)) ** (i - 1))
+
+    tmp = np.multiply(dgb, (0.5 * (1 - b)) ** i)
+    if i > 0:
+        tmp -= 0.5 * i * np.multiply(gb, (0.5 * (1 - b)) ** (i - 1))
+    dmodeds += np.multiply(fa, tmp)
+
+    # normalize
+    dmodedr *= 2 ** (i + 0.5)
+    dmodeds *= 2 ** (i + 0.5)
+
+    return dmodedr, dmodeds
+
+
+def GradVandermonde2D(N, r, s):
+    n_nodes = int(0.5 * (N + 1) * (N + 2))
+    V2Dr = np.zeros((len(r), n_nodes))
+    V2Ds = np.zeros((len(r), n_nodes))
+    a, b = rstoab(r, s)
+    sk = 0
+    for i in range(N + 1):
+        for j in range(N + 1 - i):
+            V2Dr[:, sk], V2Ds[:, sk] = GradSimplex2DP(a, b, i, j)
+            sk += 1
+    return V2Dr, V2Ds
+
+
 def get_derivative_operators_2d(degree: int) -> Tuple[np.ndarray, np.ndarray]:
     """
     Returns the derivative operators `Dr` and `Ds` for the given degree of the local polynomial approximation.
-
-    FIXME: This function is very slow for large degree. Try to speed it up by reducing redundant calls.
 
     Args:
         degree (int): Degree of the local polynomial approximation.
@@ -210,11 +197,10 @@ def get_derivative_operators_2d(degree: int) -> Tuple[np.ndarray, np.ndarray]:
         np.ndarray: The derivative operator `Ds` for the s coordinate in computational space as a 2d array.
     """
     reference_nodes = get_nodes_2d(degree)
-    P, Pr, Ps = _get_orthonormal_poly_basis_2d(degree)
-
-    V = _get_V(reference_nodes, P)
-    Vr = _get_V(reference_nodes, Pr)
-    Vs = _get_V(reference_nodes, Ps)
+    r = reference_nodes[:, 0]
+    s = reference_nodes[:, 1]
+    V = Vandermonde2D(degree, r, s)
+    Vr, Vs = GradVandermonde2D(degree, r, s)
 
     V_inv = np.linalg.inv(V)
     Dr = Vr @ V_inv
@@ -247,8 +233,7 @@ def get_LIFT_2d(degree: int) -> np.ndarray:
     n_edge_nodes = degree + 1
 
     nodes = get_nodes_2d(degree)
-    P, _, _ = _get_orthonormal_poly_basis_2d(degree)
-    V = _get_V(nodes, P)
+    V = Vandermonde2D(degree, nodes[:, 0], nodes[:, 1])
     M_inv = V @ V.T
 
     Emat = np.zeros((n_nodes, 3 * n_edge_nodes))

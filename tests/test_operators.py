@@ -10,9 +10,8 @@ from pydglib.operators import (
     get_edge_mass_matrix_2d,
     get_LIFT_2d,
     _get_orthonormal_poly_basis_1d,
-    _get_orthonormal_poly_basis_2d,
 )
-from pydglib.utils.nodes import get_nodes_1d, get_nodes_2d
+from pydglib.utils.nodes import get_nodes_1d
 from .data import load
 
 
@@ -27,131 +26,6 @@ class TestGetV:
         assert len(V.shape) == 2
         assert V.shape[0] == n_nodes
         assert V.shape[1] == n_nodes
-
-    def test_returns_square_numpy_array_for_2d_polynomials(self):
-        degree = 4
-        nodes = get_nodes_2d(degree)
-        n_nodes = nodes.shape[0]
-        P, _, _ = _get_orthonormal_poly_basis_2d(degree)
-        V = _get_V(nodes, P)
-        assert isinstance(V, np.ndarray)
-        assert len(V.shape) == 2
-        assert V.shape[0] == n_nodes
-        assert V.shape[1] == n_nodes
-
-    def test_returns_correct_V_array_for_2d_polynomials_of_degree_2(self):
-        degree = 2
-        nodes = get_nodes_2d(degree)
-        P, _, _ = _get_orthonormal_poly_basis_2d(degree)
-        V = _get_V(nodes, P)
-        V_actual = np.array(
-            [
-                [
-                    np.sqrt(2) / 2,
-                    -1,
-                    np.sqrt(3 / 2),
-                    -np.sqrt(3),
-                    np.sqrt(9 / 2),
-                    np.sqrt(15 / 2),
-                ],
-                [np.sqrt(2) / 2, -1, np.sqrt(3 / 2), 0, 0, -np.sqrt(15 / 2) / 2],
-                [
-                    np.sqrt(2) / 2,
-                    -1,
-                    np.sqrt(3 / 2),
-                    np.sqrt(3),
-                    -np.sqrt(9 / 2),
-                    np.sqrt(15 / 2),
-                ],
-                [
-                    np.sqrt(2) / 2,
-                    0.5,
-                    -np.sqrt(3 / 2) / 2,
-                    -np.sqrt(3) / 2,
-                    -np.sqrt(9 / 2) * 0.75,
-                    np.sqrt(15 / 2) / 4,
-                ],
-                [
-                    np.sqrt(2) / 2,
-                    0.5,
-                    -np.sqrt(3 / 2) / 2,
-                    np.sqrt(3) / 2,
-                    np.sqrt(9 / 2) * 0.75,
-                    np.sqrt(15 / 2) / 4,
-                ],
-                [np.sqrt(2) / 2, 2, 3 * np.sqrt(3 / 2), 0, 0, 0],
-            ]
-        )
-        assert np.allclose(V, V_actual)
-
-    def test_returns_correct_Vr_array_for_2d_polynomials_of_degree_2(self):
-        degree = 2
-        nodes = get_nodes_2d(degree)
-        _, Pr, _ = _get_orthonormal_poly_basis_2d(degree)
-        Vr = _get_V(nodes, Pr)
-        Vr_actual = np.array(
-            [
-                [0, 0, 0, np.sqrt(3), -np.sqrt(9 / 2), -np.sqrt(135 / 2)],
-                [0, 0, 0, np.sqrt(3), -np.sqrt(9 / 2), 0],
-                [0, 0, 0, np.sqrt(3), -np.sqrt(9 / 2), np.sqrt(135 / 2)],
-                [0, 0, 0, np.sqrt(3), np.sqrt(9 / 2) * 3 / 2, -np.sqrt(135 / 2) / 2],
-                [0, 0, 0, np.sqrt(3), np.sqrt(9 / 2) * 3 / 2, np.sqrt(135 / 2) / 2],
-                [0, 0, 0, np.sqrt(3), np.sqrt(9 / 2) * 4, 0],
-            ]
-        )
-        assert np.allclose(Vr, Vr_actual)
-
-    def test_returns_correct_Vs_array_for_2d_polynomials_of_degree_2(self):
-        degree = 2
-        nodes = get_nodes_2d(degree)
-        _, _, Ps = _get_orthonormal_poly_basis_2d(degree)
-        Vs = _get_V(nodes, Ps)
-        Vs_actual = np.array(
-            [
-                [
-                    0,
-                    1.5,
-                    -4 * np.sqrt(3 / 2),
-                    np.sqrt(3 / 4),
-                    -6 * np.sqrt(9 / 8),
-                    -2 * np.sqrt(15 / 8),
-                ],
-                [
-                    0,
-                    1.5,
-                    -4 * np.sqrt(3 / 2),
-                    np.sqrt(3 / 4),
-                    -np.sqrt(9 / 8),
-                    np.sqrt(15 / 8),
-                ],
-                [
-                    0,
-                    1.5,
-                    -4 * np.sqrt(3 / 2),
-                    np.sqrt(3 / 4),
-                    4 * np.sqrt(9 / 8),
-                    4 * np.sqrt(15 / 8),
-                ],
-                [
-                    0,
-                    1.5,
-                    np.sqrt(3 / 2),
-                    np.sqrt(3 / 4),
-                    -np.sqrt(9 / 8),
-                    -np.sqrt(15 / 8),
-                ],
-                [
-                    0,
-                    1.5,
-                    np.sqrt(3 / 2),
-                    np.sqrt(3 / 4),
-                    4 * np.sqrt(9 / 8),
-                    2 * np.sqrt(15 / 8),
-                ],
-                [0, 1.5, 6 * np.sqrt(3 / 2), np.sqrt(3 / 4), 4 * np.sqrt(9 / 8), 0],
-            ]
-        )
-        assert np.allclose(Vs, Vs_actual)
 
 
 class TestGetDerivativeOperator1D:
@@ -194,7 +68,7 @@ class TestGetLIFT1D:
         assert np.allclose(LIFT_actual, LIFT_pred)
 
 
-class TestGetDerivativeOperator2D:
+class TestGetDerivativeOperators2D:
     def test_returns_square_numpy_array(self):
         degree = 5
         n_nodes = int(0.5 * (degree + 1) * (degree + 2))
