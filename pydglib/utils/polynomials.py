@@ -162,7 +162,6 @@ def jacobi(alpha: float, beta: float, degree: int) -> Polynomial:
     assert degree >= 0
     assert int(degree) - degree == 0
 
-    @np.vectorize
     def p(x):
         if isinstance(x, np.ndarray):
             x_shape = x.shape
