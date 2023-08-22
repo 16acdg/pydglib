@@ -138,6 +138,20 @@ def MaxwellRHS2D(grid: Grid2D, time, Dr, Ds, LIFT):
         element.grad[2] = rhsEz  # dEz/dt
 
 
+def get_time_step(grid: Grid2D) -> float:
+    rLGL = get_nodes_1d(grid.degree)
+    rmin = abs(rLGL[0] - rLGL[1])
+
+    dtscale = np.zeros(len(grid.elements))
+    for i, element in enumerate(grid.elements):
+        inscribed_radius = 2 * element.area / element.perimeter
+        dtscale[i] = inscribed_radius
+
+    dt = np.min(dtscale) * rmin * 2 / 3
+
+    return dt
+
+
 def solve(x0, x1, y0, y1, IC, final_time, n_elements, degree):
     nx = int(np.sqrt(n_elements / 2))
     ny = int((n_elements / 2) / nx)
@@ -169,8 +183,7 @@ def solve(x0, x1, y0, y1, IC, final_time, n_elements, degree):
 
     x = grid.nodes
 
-    # TODO: Determine time step from grid size
-    dt = 0.0045
+    dt = get_time_step(grid)
 
     sol = odeint(
         MaxwellRHS2D,
