@@ -6,10 +6,19 @@ from pydglib.grid import Grid2D
 from pydglib.mesh import meshgen2d
 from pydglib.odeint import odeint
 from pydglib.operators import get_derivative_operators_2d, get_LIFT_2d
+from pydglib.element import Element2D
 
 
 def Curl2D(
-    ux: np.ndarray, uy: np.ndarray, uz: np.ndarray, rx, sx, ry, sy, Dr, Ds
+    ux: np.ndarray,
+    uy: np.ndarray,
+    uz: np.ndarray,
+    rx: float,
+    sx: float,
+    ry: float,
+    sy: float,
+    Dr,
+    Ds,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute the 2D curl-operator in the x-y plane.
@@ -19,18 +28,13 @@ def Curl2D(
     uyr = Dr @ uy
     uys = Ds @ uy
 
-    vz = (
-        np.multiply(rx, uyr)
-        + np.multiply(sx, uys)
-        + np.multiply(-ry, uxr)
-        + np.multiply(-sy, uxs)
-    )
+    vz = rx * uyr + sx * uys - ry * uxr - sy * uxs
 
     if len(uz) > 0:
         uzr = Dr @ uz
         uzs = Ds @ uz
-        vx = np.multiply(ry, uzr) + np.multiply(sy, uzs)
-        vy = np.multiply(-rx, uzr) + np.multiply(-sx, uzs)
+        vx = ry * uzr + sy * uzs
+        vy = -rx * uzr - sx * uzs
     else:
         vx = []
         vy = []
@@ -38,42 +42,30 @@ def Curl2D(
     return vx, vy, vz
 
 
-def Grad2D(u: np.ndarray, rx, sx, ry, sy, Dr, Ds) -> Tuple[np.ndarray, np.ndarray]:
+def Grad2D(
+    u: np.ndarray, rx: float, sx: float, ry: float, sy: float, Dr, Ds
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Returns the gradient [ux, uy] of the scalar field u.
     """
     ur = Dr @ u
     us = Ds @ u
 
-    ux = np.multiply(rx, ur) + np.multiply(sx, us)
-    uy = np.multiply(ry, ur) + np.multiply(sy, us)
+    ux = rx * ur + sx * us
+    uy = ry * ur + sy * us
 
     return ux, uy
 
 
-def GeometricFactors2D(x, y, Dr, Ds):
-    """
-    Computes transformation Jacobians.
-
-    Args:
-        x (np.ndarray): 1d array of x positions of nodes of an element in physical domain.
-        y (np.ndarray): 1d array of y postitions of nodes of an element in physical domain.
-        Dr (np.ndarray):
-        Ds (np.ndarray):
-    """
-    xr = Dr @ x
-    xs = Ds @ x
-
-    yr = Dr @ y
-    ys = Ds @ y
-
-    J = np.multiply(-xs, yr) + np.multiply(xr, ys)
-
-    rx = np.divide(ys, J)
-    sx = np.divide(-yr, J)
-    ry = np.divide(-xs, J)
-    sy = np.divide(xr, J)
-
+def GeometricFactors2D(element: Element2D):
+    v1, v2, v3 = element.vertices
+    xr, yr = (v2 - v1) / 2
+    xs, ys = (v3 - v1) / 2
+    J = xr * ys - xs * yr
+    rx = ys / J
+    ry = -xs / J
+    sx = -yr / J
+    sy = xr / J
     return rx, sx, ry, sy, J
 
 
@@ -85,11 +77,6 @@ def compute_surface_terms(element, LIFT, Dr, Ds, IDX):
     Hx = element.state[0]
     Hy = element.state[1]
     Ez = element.state[2]
-
-    # Compute geometric factors
-    x = element.nodes[:, 0]
-    y = element.nodes[:, 1]
-    rx, sx, ry, sy, J = GeometricFactors2D(x, y, Dr, Ds)
 
     fluxHx = np.zeros((3, n_edge_nodes))
     fluxHy = np.zeros((3, n_edge_nodes))
@@ -128,8 +115,10 @@ def compute_surface_terms(element, LIFT, Dr, Ds, IDX):
         fluxEz[i] = Fscale[i] * (-nx * dHy + ny * dHx - dEz)
 
     # local derivatives of fields
-    Ezx, Ezy = Grad2D(Ez, rx, sx, ry, sy, Dr, Ds)
-    _, _, CuHz = Curl2D(Hx, Hy, [], rx, sx, ry, sy, Dr, Ds)
+    Ezx, Ezy = Grad2D(Ez, element.rx, element.sx, element.ry, element.sy, Dr, Ds)
+    _, _, CuHz = Curl2D(
+        Hx, Hy, [], element.rx, element.sx, element.ry, element.sy, Dr, Ds
+    )
 
     # Reshape flux vectors
     fluxHx = fluxHx.reshape(-1)
@@ -162,6 +151,14 @@ def solve(x0, x1, y0, y1, IC, final_time, n_elements, degree):
     LIFT = get_LIFT_2d(degree)
 
     grid = Grid2D(VX, VY, EToV, degree, IC)
+
+    # Set geometric factors on elements
+    for element in grid.elements:
+        rx, sx, ry, sy, _ = GeometricFactors2D(element)
+        element.rx = rx
+        element.sx = sx
+        element.ry = ry
+        element.sy = sy
 
     x = grid.nodes
 
