@@ -7,6 +7,7 @@ from pydglib.mesh import meshgen2d
 from pydglib.odeint import odeint
 from pydglib.operators import get_derivative_operators_2d, get_LIFT_2d
 from pydglib.element import Element2D
+from pydglib.utils.nodes import get_nodes_1d
 
 
 def Curl2D(
@@ -69,7 +70,7 @@ def GeometricFactors2D(element: Element2D):
     return rx, sx, ry, sy, J
 
 
-def compute_surface_terms(element, LIFT, Dr, Ds, IDX):
+def compute_surface_terms(element, LIFT, Dr, Ds):
     n_edge_nodes = element.degree + 1
     n_nodes = element.n_nodes
 
@@ -82,10 +83,13 @@ def compute_surface_terms(element, LIFT, Dr, Ds, IDX):
     fluxHy = np.zeros((3, n_edge_nodes))
     fluxEz = np.zeros((3, n_edge_nodes))
 
-    if IDX % 2 == 0:
-        Fscale = np.array([8, 8, 8 * np.sqrt(2)])
-    else:
-        Fscale = np.array([8 * np.sqrt(2), 8, 8])
+    Fscale = np.array(
+        [
+            element.edge1_length / element.area,
+            element.edge2_length / element.area,
+            element.edge3_length / element.area,
+        ]
+    )
 
     # Define field differences at faces
     for i, edge in enumerate(element.edges):
@@ -127,8 +131,8 @@ def compute_surface_terms(element, LIFT, Dr, Ds, IDX):
 
 
 def MaxwellRHS2D(grid: Grid2D, time, Dr, Ds, LIFT):
-    for IDX, element in enumerate(grid.elements):
-        rhsHx, rhsHy, rhsEz = compute_surface_terms(element, LIFT, Dr, Ds, IDX)
+    for element in grid.elements:
+        rhsHx, rhsHy, rhsEz = compute_surface_terms(element, LIFT, Dr, Ds)
         element.grad[0] = rhsHx  # dHx/dt
         element.grad[1] = rhsHy  # dHy/dt
         element.grad[2] = rhsEz  # dEz/dt
@@ -152,6 +156,16 @@ def solve(x0, x1, y0, y1, IC, final_time, n_elements, degree):
         element.sx = sx
         element.ry = ry
         element.sy = sy
+
+    # Set side lengths on element
+    for element in grid.elements:
+        v1, v2, v3 = element.vertices
+        edge1 = v2 - v1
+        edge2 = v3 - v2
+        edge3 = v1 - v3
+        element.edge1_length = np.linalg.norm(edge1)
+        element.edge2_length = np.linalg.norm(edge2)
+        element.edge3_length = np.linalg.norm(edge3)
 
     x = grid.nodes
 
