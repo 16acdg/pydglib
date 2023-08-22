@@ -100,13 +100,6 @@ def compute_surface_terms(element, LIFT, Dr, Ds, IDX):
             dHy = internal_state[1] - external_state[1]
             dEz = internal_state[2] - external_state[2]
 
-        ###############
-        if i == 2:
-            dHx = np.flip(dHx)
-            dHy = np.flip(dHy)
-            dEz = np.flip(dEz)
-        ###############
-
         # Evaluate upwind fluxes
         nx, ny = element.normals[i]
         ndotdH = nx * dHx + ny * dHy

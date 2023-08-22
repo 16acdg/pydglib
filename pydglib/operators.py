@@ -245,7 +245,7 @@ def get_LIFT_2d(degree: int) -> np.ndarray:
     Emat[
         reference_element._edge_node_indicies[1], n_edge_nodes : 2 * n_edge_nodes
     ] = M_edge
-    Emat[np.flip(reference_element._edge_node_indicies[2]), 2 * n_edge_nodes :] = M_edge
+    Emat[reference_element._edge_node_indicies[2], 2 * n_edge_nodes :] = M_edge
 
     LIFT = M_inv @ Emat
 
