@@ -3,6 +3,7 @@ import pytest
 import numpy as np
 
 from pydglib.element import Element1D, Element2D, Element2DInterface
+import pydglib.utils.nodes as pydglib_nodes_module
 
 
 class TestElement1D:
@@ -536,6 +537,43 @@ class TestElement2D:
         assert np.allclose(
             element1.edges[1].get_external_state(), np.flip(element2.get_edge(2))
         )
+
+    def test_doesnt_call_get_nodes_when_nodes_are_supplied_in_constructor(
+        self, monkeypatch
+    ):
+        # Define arguments for Element2D instance
+        degree = 8
+        n_nodes = int(0.5 * (degree + 1) * (degree + 2))
+        n_edge_nodes = degree + 1
+        v1 = np.array([0, 0])
+        v2 = np.array([1, 1])
+        v3 = np.array([0, 1])
+        IC = lambda x: np.zeros(x.shape[0])
+        nodes, b1, b2, b3 = pydglib_nodes_module.get_nodes_2d(
+            degree, include_boundary=True
+        )
+
+        # Patch get_nodes_2d so we know when if get_nodes_2d is called by the element
+        self.invocation_counter = 0
+
+        def mock_get_nodes_2d(*args, **kwargs):
+            self.invocation_counter += 1
+            return nodes, b1, b2, b3
+
+        monkeypatch.setattr(pydglib_nodes_module, "get_nodes_2d", mock_get_nodes_2d)
+
+        element = Element2D(degree, v1, v2, v3, IC, nodes, b1, b2, b3)
+
+        assert self.invocation_counter == 0
+        assert isinstance(element.nodes, np.ndarray)
+        assert len(element.nodes.shape) == 2
+        assert element.nodes.shape[0] == n_nodes
+        assert element.nodes.shape[1] == 2
+        assert len(element._edge_node_indicies) == 3
+        for indicies in element._edge_node_indicies:
+            assert isinstance(indicies, np.ndarray)
+            assert len(indicies.shape) == 1
+            assert indicies.shape[0] == n_edge_nodes
 
 
 class TestElement2DInterface:

@@ -1,7 +1,8 @@
 from typing import Tuple, Callable, List, Union
 import numpy as np
 
-from .element import Element1D, Element2D, Element2DInterface
+from pydglib.element import Element1D, Element2D, Element2DInterface
+from pydglib.utils.nodes import get_nodes_2d
 
 
 class Grid1D:
@@ -157,12 +158,14 @@ def create_elements_2d(degree, VX, VY, EToV, IC) -> List[Element2D]:
             in the sense that local information has been set in each Element2D instance,
             but no references have been made between adjacent elements in the mesh.
     """
+    nodes, b1_nodes, b2_nodes, b3_nodes = get_nodes_2d(degree, include_boundary=True)
+
     n_elements = EToV.shape[0]
     elements = []
     for i in range(n_elements):
         vertex_indices = EToV[i]
         vertices = [np.array([VX[j], VY[j]]) for j in vertex_indices]
-        element = Element2D(degree, *vertices, IC)
+        element = Element2D(degree, *vertices, IC, nodes, b1_nodes, b2_nodes, b3_nodes)
         elements.append(element)
     return elements
 

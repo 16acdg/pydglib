@@ -119,12 +119,20 @@ class Element2D:
         v2: np.ndarray,
         v3: np.ndarray,
         IC: Callable[[np.ndarray], np.ndarray],
+        nodes: np.ndarray = None,
+        b1_nodes=None,
+        b2_nodes=None,
+        b3_nodes=None,
     ):
         """
         Create a new Element2D instance.
 
         The vertices `v1`, `v2`, `v3` must be 1d numpy arrays.
         Each array must be length 2; the first entry is the x position, the second the y position.
+
+        Note that it is not strictly necessary for the nodes to be an argument for initializing an Element2D instance,
+        as the only argument needed to produce nodes for the computational domain is the degree of the polynomial approximation.
+        However, supplying the nodes is much faster when a large number of elements must be created.
 
         Args:
             degree (int): The degree of the local polynomial approximation.
@@ -134,6 +142,10 @@ class Element2D:
             IC (Callable[[np.ndarray], np.ndarray]): Initial conditions. Input array must be 1d or 2d.
                 If input array is 1d, then the array is a single node position and `IC` must return the initial condition at this position.
                 If input array is 2d, then the array is a batch of node positions; 0th axis is the batch size, 1st axis is the physical dimension.
+            nodes (np.ndarray, optional): Nodes for the computational domain.
+            b1_nodes (np.ndarray, optional): Inidicies of nodes that are on the first edge.
+            b2_nodes (np.ndarray, optional): Inidicies of nodes that are on the second edge.
+            b3_nodes (np.ndarray, optional): Inidicies of nodes that are on the third edge.
         """
         self.degree = degree
         self.vertices = [v1, v2, v3]
@@ -153,9 +165,12 @@ class Element2D:
         self.edges: List[Element2DInterface | None] = [None, None, None]
 
         # Create nodes for this element
-        self.nodes, b1_nodes, b2_nodes, b3_nodes = get_nodes_2d(
-            self.degree, include_boundary=True
-        )
+        if nodes is None:
+            self.nodes, b1_nodes, b2_nodes, b3_nodes = get_nodes_2d(
+                self.degree, include_boundary=True
+            )
+        else:
+            self.nodes = nodes
         self.nodes = computational_to_physical_2d(self.nodes, v1, v2, v3)
         self.n_nodes = self.nodes.shape[0]
         self._edge_node_indicies: List[np.ndarray] = [b1_nodes, b2_nodes, b3_nodes]
