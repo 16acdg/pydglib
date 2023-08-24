@@ -219,7 +219,7 @@ class TestGetNodes2D:
         )
         assert np.allclose(nodes, nodes_correct)
 
-    def test_returns_boundary_node_indicies_if_include_boundary_True(self):
+    def test_returns_boundary_node_indices_if_include_boundary_True(self):
         degree = 5
         nodes, b1, b2, b3 = get_nodes_2d(degree, include_boundary=True)
         n_nodes = nodes.shape[0]
@@ -231,8 +231,33 @@ class TestGetNodes2D:
             assert isinstance(b2[i], np.integer) and 0 <= b2[i] < n_nodes
             assert isinstance(b3[i], np.integer) and 0 <= b3[i] < n_nodes
 
-        # Test there are 3 corner nodes that appear in exactly two of b1, b2, b3,
-        # and all other boundary nodes appear in exactly one of b1, b2, b3.
+    def test_nodes_on_vertices_appear_on_two_edges(self):
+        degree = 5
+        _, b1, b2, b3 = get_nodes_2d(degree, include_boundary=True)
         assert len(set(b1) & set(b2)) == 1
         assert len(set(b2) & set(b3)) == 1
         assert len(set(b3) & set(b1)) == 1
+
+    def test_nodes_at_edge_indices_are_actually_on_boundary_of_reference_element(self):
+        degree = 5
+        nodes, b1, b2, b3 = get_nodes_2d(degree, include_boundary=True)
+        for i in b1:
+            # assert nodes on first edge are on line y = -1
+            assert np.isclose(nodes[i][1], -1)
+        for i in b2:
+            # assert nodes on second edge are on line y = -x
+            assert np.isclose(nodes[i][1] / nodes[i][0], -1)
+        for i in b3:
+            # assert nodes on third edge are on line x = -1
+            assert np.isclose(nodes[i][0], -1)
+
+    def test_nodes_on_edge_are_ordered_counterclockwise(self):
+        degree = 5
+        nodes, b1, b2, b3 = get_nodes_2d(degree, include_boundary=True)
+        for i in range(degree):
+            assert nodes[b1[i]][0] < nodes[b1[i + 1]][0]
+            assert (
+                nodes[b2[i]][0] > nodes[b2[i + 1]][0]
+                and nodes[b2[i]][1] < nodes[b2[i + 1]][1]
+            )
+            assert nodes[b3[i]][1] > nodes[b3[i + 1]][1]
