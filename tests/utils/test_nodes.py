@@ -131,12 +131,13 @@ class TestGetNodes2D:
 
     def test_returned_nodes_are_inside_reference_triangle(self):
         degree = 4
+        machine_epsilon = np.finfo(float).eps
         nodes = get_nodes_2d(degree)
         for i in range(nodes.shape[0]):
             x, y = nodes[i]
-            assert x + y < 1e-10
-            assert -1 <= x <= 1
-            assert -1 <= y <= 1
+            assert x + y < machine_epsilon
+            assert -1 - machine_epsilon <= x <= 1 + machine_epsilon
+            assert -1 - machine_epsilon <= y <= 1 + machine_epsilon
 
     def test_returns_correct_nodes_for_2nd_degree_approximation(self):
         degree = 2
