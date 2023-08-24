@@ -1,3 +1,4 @@
+from typing import Tuple
 import numpy as np
 from scipy.special import legendre as legendre_unscaled
 
@@ -102,7 +103,26 @@ def warpfactor(degree: int, rout: np.ndarray) -> np.ndarray:
     return warp
 
 
-def get_nodes_2d(degree: int, include_boundary: bool = False) -> np.ndarray:
+def get_nodes_2d(
+    degree: int, include_boundary: bool = False
+) -> np.ndarray | Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Returns nodes for the 2d reference element I = ConvexHull{(-1,-1), (1,-1), (-1,1)}.
+
+    The nodes are derived from equidistant nodes on I with warping derived from the 1d LGL nodes.
+
+    Args:
+        degree (int): Degree of the local polynomial approximation.
+        include_boundary (bool, optional): If True, include numpy arrays specifying indices of nodes that are on the boundary of I. Defaults to False.
+
+    Returns:
+        np.darray: Returns Np := (`degree` + 1) * (`degree` + 2) / 2 nodes.
+            The nodes are returned as 2d numpy array of size Np-by-2.
+        If `include_boundary` = True, then the following is also returned:
+        np.ndarray: 1d numpy array of indices of nodes on first edge of I.
+        np.ndarray: 1d numpy array of indices of nodes on second edge of I.
+        np.ndarray: 1d numpy array of indices of nodes on third edge of I.
+    """
     alpha = _get_alpha_opt(degree)
 
     n_nodes = int(0.5 * (degree + 1) * (degree + 2))
