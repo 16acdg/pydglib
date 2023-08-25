@@ -1,9 +1,9 @@
-from typing import Tuple
+from typing import Tuple, Callable
 import numpy as np
 from tqdm import tqdm
 import math
 
-from .grid import Grid1D
+from pydglib.grid import Grid
 
 # Low storage RK coefficients
 rk4a = [
@@ -30,22 +30,24 @@ rk4c = [
 
 
 def odeint(
-    sys, grid: Grid1D, final_time: float, dt: float, args: Tuple[any] = ()
+    sys: Callable, grid: Grid, final_time: float, dt: float, args: Tuple[any] = ()
 ) -> np.ndarray:
     """
     Integrates the ODE system dy/dt = sys(y,t).
 
-    Uses a Runge-Kutta method
+    Uses RK4 integration.
 
     Args:
-        sys (function): Right-hand-side of the ODE.
-        grid (Grid1D): Grid on which to compute and update solution
-        final_time (int): Rime to integrate until.
+        sys (Callable): Right-hand-side of the ODE.
+        grid (Grid): Grid on which to compute and update solution
+        final_time (float): Time to integrate until.
         dt (float): Time step.
         args (Tuple[any], optional): Arguments to pass to sys. Defaults to ().
 
     Returns:
-        np.ndarray: 3d numpy array of the solution at each time step.
+        np.ndarray: 3d or 4d numpy array of the solution at each time step.
+            If the `state_dimension` = 1, then shape = (num time steps, n_elements, n_nodes`, `state_dimension`).
+            If `state_dimension` > 1, then shape = (num time steps, `n_elements`, `n_nodes`, `state_dimension`).
     """
     time = 0  # running time
     nt = math.ceil(final_time / dt)

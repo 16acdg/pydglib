@@ -1,17 +1,94 @@
+from abc import ABC
 from typing import Tuple, Callable, List, Union
 import numpy as np
 
-from pydglib.element import Element1D, Element2D, Element2DInterface, InitialConditions
+from pydglib.element import (
+    Element,
+    Element1D,
+    Element2D,
+    Element2DInterface,
+    InitialConditions,
+)
 from pydglib.utils.nodes import get_nodes_2d
 
 
-class Grid1D:
+class Grid(ABC):
+    def __init__(self, elements: List[Element], physical_dimension: int):
+        self.elements = elements
+        self.physical_dimension = physical_dimension
+
+    @property
+    def degree(self) -> int:
+        return self.elements[0].degree if len(self.elements) > 0 else 0
+
+    @property
+    def n_elements(self) -> int:
+        return len(self.elements)
+
+    @property
+    def n_nodes(self) -> int:
+        return self.elements[0].n_nodes if len(self.elements) > 0 else 0
+
+    @property
+    def state_dimension(self) -> int:
+        return self.elements[0].state_dimension if len(self.elements) > 0 else 0
+
+    @property
+    def shape(self) -> Tuple:
+        """Returns the shape of the grid's state."""
+        if self.state_dimension == 1:
+            return (self.n_elements, self.n_nodes)
+        else:
+            return (self.n_elements, self.n_nodes, self.state_dimension)
+
+    @property
+    def nodes(self) -> np.ndarray:
+        """Returns the node positions of all elements in this grid as a (`n_elements`, `n_nodes`, `physical_dimension`) shaped numpy array."""
+        if self.physical_dimension == 1:
+            out_shape = (self.n_elements, self.n_nodes)
+        else:
+            out_shape = (self.n_elements, self.n_nodes, self.physical_dimension)
+        out = np.zeros(out_shape)
+        for i, element in enumerate(self.elements):
+            out[i] = element.nodes
+        return out
+
+    @property
+    def state(self) -> np.ndarray:
+        """Returns the state of all elements in this grid as a (`n_elements`, `n_nodes`, state_dimension) sized numpy array."""
+        return self.__array__()
+
+    @property
+    def grad(self) -> np.ndarray:
+        """Returns the gradients of all elements in this grid as a (`n_elements`, `n_nodes`, state_dimension) sized numpy array."""
+        out = np.zeros(self.shape)
+        for i, element in enumerate(self.elements):
+            out[i] = element.grad
+        return out
+
+    def __array__(self, dtype: np.dtype = np.float32) -> np.ndarray:
+        """
+        Converts this Grid instance into a numpy array containing the grid's state.
+
+        Args:
+            dtype (np.dtype, optional): Data type of the returned numpy array. Defaults to float32.
+
+        Returns:
+            np.ndarray: This Grid instance as a numpy array.
+        """
+        out = np.zeros(self.shape, dtype=dtype)
+        for i, element in enumerate(self.elements):
+            out[i] = element.state
+        return out
+
+
+class Grid1D(Grid):
     def __init__(
         self,
         VX: np.ndarray,
         EToV: np.ndarray,
         n_nodes: int,
-        IC: Union[Callable, List[Callable]],
+        IC: InitialConditions,
         dtype=np.float64,
     ):
         """
@@ -26,9 +103,7 @@ class Grid1D:
             VX (np.ndarray): Positions of vertices in the physical domain.
             EToV (np.ndarray): Element-to-vertex map.
             n_nodes (int): Number of nodes per element.
-            IC (Union[Callable, List[Callable]]): Initial conditions for state.
-                If state's dimension is 1, then IC must be a function.
-                If state's dimension is greater than 1, then IC must be a list of functions, one for each state dimension.
+            IC (InitialConditions): Initial conditions for state.
             dtype (np.dtype, optional): Data type of the state. Defaults to np.float64.
         """
         assert isinstance(VX, np.ndarray)
@@ -42,22 +117,24 @@ class Grid1D:
         for i in range(VX.size - 1):
             assert VX[i] < VX[i + 1]
 
-        self.n_nodes = n_nodes
-        self.n_elements = EToV.shape[0]
+        # Create elements
+        elements: List[Element1D] = []
+        n_elements = EToV.shape[0]
+        for k in range(n_elements):
+            xl = VX[k]
+            xr = VX[k + 1]
+            element = Element1D(k, n_nodes, xl, xr, IC, dtype=dtype)
+            elements.append(element)
+
+        super().__init__(elements, 1)
+
         self.xl = VX[0]
         self.xr = VX[-1]
         self.dtype = dtype
         self.VX = VX
         self.EToV = EToV
         self.IC = IC
-        self.state_dimension = 1 if isinstance(self.IC, Callable) else len(self.IC)
 
-        self.elements: List[Element1D] = []
-        for k in range(self.n_elements):
-            xl = VX[k]
-            xr = VX[k + 1]
-            element = Element1D(k, n_nodes, xl, xr, IC, dtype=dtype)
-            self.elements.append(element)
         self._create_references_between_elements()
 
     def _create_references_between_elements(self):
@@ -75,53 +152,6 @@ class Grid1D:
             prev_el = self.elements[el_index]
             next_v_index = self.EToV[el_index, 1]
             k += 1
-
-    @property
-    def nodes(self) -> np.ndarray:
-        """Returns the node positions of all elements in this grid as a 2d numpy array."""
-        out = np.zeros((self.n_elements, self.n_nodes))
-        for i, element in enumerate(self.elements):
-            out[i] = element.nodes
-        return out
-
-    @property
-    def state(self) -> np.ndarray:
-        """Returns the state of all elements in this grid as a 2d numpy array."""
-        return self.__array__()
-
-    @property
-    def grad(self) -> np.ndarray:
-        """Returns the gradients of all elements in this grid as a 2d numpy array."""
-        out = np.zeros(self.shape)
-        for i, element in enumerate(self.elements):
-            out[i] = element.grad
-        return out
-
-    @property
-    def shape(self) -> Tuple:
-        """Returns the shape of the grid's state."""
-        if self.state_dimension == 1:
-            return (self.n_elements, self.n_nodes)
-        else:
-            return (self.n_elements, self.n_nodes, self.state_dimension)
-
-    def __array__(self, dtype=None) -> np.ndarray:
-        """
-        Converts this Grid1D instance into a numpy array containing the grid's state.
-
-        Args:
-            dtype (np.dtype, optional): Data type of the returned numpy array
-
-        Returns:
-            np.ndarray: This Grid1D instance as a numpy array.
-        """
-        out = np.zeros(self.shape)
-        for i, element in enumerate(self.elements):
-            out[i] = element.state
-        return out
-
-    def __repr__(self) -> str:
-        return f"Grid1D({self.state}, grad={self.grad})"
 
 
 def create_elements_2d(degree, VX, VY, EToV, IC) -> List[Element2D]:
@@ -223,7 +253,7 @@ def connect_elements_2d(elements: List[Element2D], EToV: np.ndarray):
                     )
 
 
-class Grid2D:
+class Grid2D(Grid):
     def __init__(
         self,
         VX: np.ndarray,
@@ -240,69 +270,17 @@ class Grid2D:
             VY (np.ndarray): y coordinates of grid vertices.
             EToV (np.ndarray): Element-to-vertex map.
             degree (int): Degree of the local polynomial approximation.
-            IC (InitialConditions): Initial conditions. Must support 1d and 2d array inputs.
-                If input to `IC` is 1d, then the array must be length 2 and the function must return a float.
-                If input to `IC` is 2d, the second dimension of the array must be length 2 and it must return a 1d numpy array,
-                where the length of the 1d array equals the size of the input array's first dimension.
+            IC (InitialConditions): Initial conditions for state.
         """
+        # Create elements
+        elements = create_elements_2d(degree, VX, VY, EToV, IC)
+
+        super().__init__(elements, 2)
+
         self.VX = VX
         self.VY = VY
         self.EToV = EToV
-        self.degree = degree
         self.IC = IC
 
-        self.n_elements = EToV.shape[0]
-        self.n_edge_nodes = degree + 1  # per element
-        self.n_nodes = int(0.5 * (degree + 1) * (degree + 2))  # per element
-        self.state_dimension = 1 if callable(self.IC) else len(self.IC)
-
         # Create graph of elements (ie set references between adjacent elements)
-        self.elements: List[Element2D] = create_elements_2d(degree, VX, VY, EToV, IC)
         connect_elements_2d(self.elements, self.EToV)
-
-    @property
-    def nodes(self) -> np.ndarray:
-        """Returns the positions of all nodes of all elements in this grid as a 2d numpy array."""
-        out = np.zeros((self.n_elements, self.n_nodes, 2))
-        for i, element in enumerate(self.elements):
-            out[i] = element.nodes
-        return out
-
-    @property
-    def state(self) -> np.ndarray:
-        """Returns the state of all elements in this grid as a 2d numpy array."""
-        return self.__array__()
-
-    @property
-    def grad(self) -> np.ndarray:
-        """Returns the gradients of all elements in this grid as a 2d numpy array."""
-        out = np.zeros(self.shape)
-        for i, element in enumerate(self.elements):
-            out[i] = element.grad
-        return out
-
-    @property
-    def shape(self) -> Tuple[float, ...]:
-        """Returns the shape of the grid's state."""
-        if self.state_dimension == 1:
-            return (self.n_elements, self.n_nodes)
-        else:
-            return (self.n_elements, self.n_nodes, self.state_dimension)
-
-    def __array__(self, dtype: np.dtype = None) -> np.ndarray:
-        """
-        Converts this Grid2D instance into a numpy array containing the grid's state.
-
-        Args:
-            dtype (np.dtype, optional): Data type of the returned numpy array
-
-        Returns:
-            np.ndarray: This Grid2D instance as a numpy array.
-        """
-        out = np.zeros(self.shape)
-        for i, element in enumerate(self.elements):
-            out[i] = element.state
-        return out
-
-    def __repr__(self) -> str:
-        return f"Grid2D({self.state}, grad={self.grad})"
