@@ -1,5 +1,4 @@
 import numpy as np
-import pdb
 from typing import Tuple
 
 from pydglib.grid import Grid2D
@@ -58,14 +57,14 @@ def Grad2D(
     return ux, uy
 
 
-def compute_surface_terms(element, LIFT, Dr, Ds):
+def compute_gradients(element: Element2D, LIFT, Dr, Ds):
     n_edge_nodes = element.degree + 1
     n_nodes = element.n_nodes
 
     # Extract state variables
-    Hx = element.state[0]
-    Hy = element.state[1]
-    Ez = element.state[2]
+    Hx = element.state[:, 0]
+    Hy = element.state[:, 1]
+    Ez = element.state[:, 2]
 
     fluxHx = np.zeros((3, n_edge_nodes))
     fluxHy = np.zeros((3, n_edge_nodes))
@@ -76,13 +75,13 @@ def compute_surface_terms(element, LIFT, Dr, Ds):
         if edge is None:  # physical boundary
             dHx = np.zeros(n_edge_nodes)
             dHy = np.zeros(n_edge_nodes)
-            dEz = 2 * element.get_edge(i)[2]
+            dEz = 2 * element.get_edge(i)[:, 2]
         else:
             internal_state = element.get_edge(i)
             external_state = edge.get_external_state()
-            dHx = internal_state[0] - external_state[0]
-            dHy = internal_state[1] - external_state[1]
-            dEz = internal_state[2] - external_state[2]
+            dHx = internal_state[:, 0] - external_state[:, 0]
+            dHy = internal_state[:, 1] - external_state[:, 1]
+            dEz = internal_state[:, 2] - external_state[:, 2]
 
         # Evaluate upwind fluxes
         nx, ny = element.normals[i]
@@ -112,10 +111,8 @@ def compute_surface_terms(element, LIFT, Dr, Ds):
 
 def MaxwellRHS2D(grid: Grid2D, time, Dr, Ds, LIFT):
     for element in grid.elements:
-        rhsHx, rhsHy, rhsEz = compute_surface_terms(element, LIFT, Dr, Ds)
-        element.grad[0] = rhsHx  # dHx/dt
-        element.grad[1] = rhsHy  # dHy/dt
-        element.grad[2] = rhsEz  # dEz/dt
+        dHxdt, dHydt, dEzdt = compute_gradients(element, LIFT, Dr, Ds)
+        element.update_gradients(dHxdt, dHydt, dEzdt)
 
 
 def get_time_step(grid: Grid2D) -> float:

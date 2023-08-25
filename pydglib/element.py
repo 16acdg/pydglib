@@ -12,6 +12,51 @@ from .utils.geometry import (
     get_outward_unit_normals_of_triangle,
 )
 
+# If initial condition is a function, then it is assumed the state is unidimensional and this function is the initial conditions for the state.
+# If initial condition is a list of functions, then it is assumed that function at index i is the initial condtion for the ith component of the state vector.
+# If physical dimension is 1, each function must accept a 1d numpy array of positions and return the initial condition applied pointwise.
+# If physical dimension is greater than 1, each function must accept a 2d numpy array of positions and return a 1d numpy array of the initial condition applied pointwise along the zeroth axis.
+InitialConditions = Union[
+    Callable[[np.ndarray], np.ndarray], List[Callable[[np.ndarray], np.ndarray]]
+]
+
+
+class ElementStateContainer:
+    """
+    This class is for any element to store its state (ie, the nodal values) and gradients.
+
+    This class is dimension agnostic, because elements in every dimension store their state and gradients in a 1d or 2d numpy array.
+    Along the zeroth axis is the node index. If the state is multidimensional, then the first axis is the state index.
+    If the state is unidimensional, then the state and gradient storage arrays are 1d.
+
+    Attributes:
+        dimension (int): The dimension of the state.
+        state (np.ndarray): The state at the nodal values as a 1d or 2d numpy array.
+        grad (np.ndarray): The gradients at the nodal values as a 1d or 2d numpy array.
+    """
+
+    def __init__(self, IC: InitialConditions, nodes: np.ndarray):
+        """
+        Creates a new ElementStateContainer instance.
+
+        Args:
+            IC (InitialConditions): Initial conditions for all state variables.
+            nodes (np.ndarray): Node positions as a 2d numpy array. Zeroth axis is batch size, first axis is physical dimension.
+        """
+        if callable(IC):
+            self.dimension = 1
+            self.state = IC(nodes)
+            self.grad = np.zeros_like(self.state)
+
+        else:
+            self.dimension = len(IC)
+            n_nodes = nodes.shape[0]
+            self.state = np.zeros((n_nodes, self.dimension))
+            self.grad = np.zeros((n_nodes, self.dimension))
+
+            for i in range(self.dimension):
+                self.state[:, i] = IC[i](nodes)
+
 
 class Element1D:
     def __init__(
@@ -51,26 +96,19 @@ class Element1D:
         self.IC = IC
         self.dtype = dtype
 
-        self.state_dimension = 1 if isinstance(self.IC, Callable) else len(self.IC)
+        # self.state_dimension = 1 if isinstance(self.IC, Callable) else len(self.IC)
         self.nodes = computational_to_physical_1d(
             get_nodes_1d(self.Np - 1), self.xl, self.xr
         )
-        state_shape = (
-            self.Np if self.state_dimension == 1 else (self.state_dimension, self.Np)
-        )
-        self.state = np.zeros(state_shape, dtype=self.dtype)
-        self.grad = np.zeros_like(self.state)
-
-        # Apply initial conditions to state
-        if self.state_dimension == 1:
-            self.state = self.IC(self.nodes)
-        elif self.state_dimension > 1:
-            for i in range(self.state_dimension):
-                self.state[i] = self.IC[i](self.nodes)
+        self._state_container = ElementStateContainer(IC, self.nodes)
 
         # Reference to element at the left and right boundaries of this element
         self.left = left
         self.right = right
+
+    @property
+    def n_nodes(self) -> int:
+        return self.Np
 
     @property
     def h(self) -> float:
@@ -80,21 +118,21 @@ class Element1D:
         return f"Element({self.state}, grad={self.grad})"
 
     def __iadd__(self, other):
-        self.state += other
+        self._state_container.state += other
         return self
 
     def __imul__(self, other):
-        self.state *= other
+        self._state_container.state *= other
         return self
 
     def __getitem__(self, index):
-        return self.state[index]
+        return self._state_container.state[index]
 
     def __setitem__(self, index, new_value):
-        self.state[index] = new_value
+        self._state_container.state[index] = new_value
 
     def __array__(self, dtype=None) -> np.ndarray:
-        return self.state
+        return self._state_container.state
 
     def __len__(self) -> int:
         return self.Np
@@ -104,6 +142,40 @@ class Element1D:
 
     def is_rightmost(self) -> bool:
         return self.left is not None and self.right is None
+
+    @property
+    def state_dimension(self) -> int:
+        return self._state_container.dimension
+
+    @property
+    def state(self) -> np.ndarray:
+        return self._state_container.state
+
+    @property
+    def grad(self) -> np.ndarray:
+        return self._state_container.grad
+
+    def update_gradients(self, *gradients):
+        """
+        Updates the gradients of this element.
+
+        Args:
+            gradients (np.ndarray): Updated gradient vectors.
+                Must supply gradients for all state dimensions.
+                Each gradient vector must be a 1d numpy array and contain the derivative of the nodal value at each respective index.
+        """
+        assert len(gradients) == self.state_dimension
+
+        for gradient in gradients:
+            assert isinstance(gradient, np.ndarray)
+            assert gradient.size == self.n_nodes
+
+        if len(gradients) == 1:
+            self._state_container.grad = gradients[0]
+
+        else:
+            for i, gradient in enumerate(gradients):
+                self._state_container.grad[:, i] = gradient
 
 
 class Element2DInterface:
@@ -148,7 +220,7 @@ class Element2D:
         v1: np.ndarray,
         v2: np.ndarray,
         v3: np.ndarray,
-        IC: Callable[[np.ndarray], np.ndarray],
+        IC: InitialConditions,
         nodes: np.ndarray = None,
         b1_nodes=None,
         b2_nodes=None,
@@ -169,9 +241,7 @@ class Element2D:
             v1 (np.ndarray): First vertex of a triangle.
             v2 (np.ndarray): Second vertex of a triangle.
             v3 (np.ndarray): Third vertex of a triangle.
-            IC (Callable[[np.ndarray], np.ndarray]): Initial conditions. Input array must be 1d or 2d.
-                If input array is 1d, then the array is a single node position and `IC` must return the initial condition at this position.
-                If input array is 2d, then the array is a batch of node positions; 0th axis is the batch size, 1st axis is the physical dimension.
+            IC (InitialConditions): Initial condition(s) for the element's state.
             nodes (np.ndarray, optional): Nodes for the computational domain.
             b1_nodes (np.ndarray, optional): Inidicies of nodes that are on the first edge.
             b2_nodes (np.ndarray, optional): Inidicies of nodes that are on the second edge.
@@ -191,25 +261,13 @@ class Element2D:
         else:
             self.nodes = nodes
         self.nodes = computational_to_physical_2d(self.nodes, v1, v2, v3)
-        self.n_nodes = self.nodes.shape[0]
         self._edge_node_indicies: List[np.ndarray] = [b1_nodes, b2_nodes, b3_nodes]
 
-        # Initialize dimension of the state of this element
-        self.state_dimension = 1 if isinstance(IC, Callable) else len(IC)
-        state_shape = (
-            self.n_nodes
-            if self.state_dimension == 1
-            else (self.state_dimension, self.n_nodes)
-        )
-        self.state = np.zeros(state_shape)
-        self.grad = np.zeros_like(self.state)
+        self._state_container = ElementStateContainer(IC, self.nodes)
 
-        # Apply initial condition(s)
-        if self.state_dimension == 1:
-            self.state = IC(self.nodes)
-        elif self.state_dimension > 1:
-            for i in range(self.state_dimension):
-                self.state[i] = IC[i](self.nodes)
+    @property
+    def n_nodes(self) -> int:
+        return self.nodes.shape[0]
 
     @property
     def area(self) -> float:
@@ -254,30 +312,61 @@ class Element2D:
     def get_edge(self, edge: int) -> np.ndarray:
         """Returns the state of this element on the specified edge."""
         assert edge in [0, 1, 2]
-        if self.state_dimension == 1:
-            return self.state[self._edge_node_indicies[edge]]
-        else:
-            return self.state[:, self._edge_node_indicies[edge]]
+        return self.state[self._edge_node_indicies[edge]]
 
     def __iadd__(self, other):
-        self.state += other
+        self._state_container.state += other
         return self
 
     def __imul__(self, other):
-        self.state *= other
+        self._state_container.state *= other
         return self
 
     def __getitem__(self, index) -> np.ndarray:
-        return self.state[index]
+        return self._state_container.state[index]
 
     def __setitem__(self, index, new_value):
-        self.state[index] = new_value
+        self._state_container.state[index] = new_value
 
     def __array__(self, dtype=None) -> np.ndarray:
-        return self.state
+        return self._state_container.state
 
     def __len__(self) -> int:
         return self.n_nodes
+
+    @property
+    def state_dimension(self) -> int:
+        return self._state_container.dimension
+
+    @property
+    def state(self) -> np.ndarray:
+        return self._state_container.state
+
+    @property
+    def grad(self) -> np.ndarray:
+        return self._state_container.grad
+
+    def update_gradients(self, *gradients):
+        """
+        Updates the gradients of this element.
+
+        Args:
+            gradients (np.ndarray): Updated gradient vectors.
+                Must supply gradients for all state dimensions.
+                Each gradient vector must be a 1d numpy array and contain the derivative of the nodal value at each respective index.
+        """
+        assert len(gradients) == self.state_dimension
+
+        for gradient in gradients:
+            assert isinstance(gradient, np.ndarray)
+            assert gradient.size == self.n_nodes
+
+        if len(gradients) == 1:
+            self._state_container.grad = gradients[0]
+
+        else:
+            for i, gradient in enumerate(gradients):
+                self._state_container.grad[:, i] = gradient
 
 
 class Element2DInterface:
@@ -359,17 +448,11 @@ class Element2DInterface:
 
     def get_external_state(self) -> np.ndarray:
         node_indicies = self._node_map[:, 1]
-        if self.exterior_element.state_dimension == 1:
-            return self.exterior_element.state[node_indicies]
-        else:
-            return self.exterior_element.state[:, node_indicies]
+        return self.exterior_element.state[node_indicies]
 
     def get_internal_state(self) -> np.ndarray:
         node_indicies = self._node_map[:, 0]
-        if self.exterior_element.state_dimension == 1:
-            return self.interior_element.state[node_indicies]
-        else:
-            return self.interior_element.state[:, node_indicies]
+        return self.exterior_element.state[node_indicies]
 
 
 def get_reference_triangle(degree: int) -> Element2D:

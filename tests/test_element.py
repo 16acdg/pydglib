@@ -2,8 +2,79 @@ from typing import Tuple
 import pytest
 import numpy as np
 
-from pydglib.element import Element1D, Element2D, Element2DInterface, ElementGeometry2D
+from pydglib.element import (
+    Element1D,
+    Element2D,
+    Element2DInterface,
+    ElementGeometry2D,
+    ElementStateContainer,
+)
 import pydglib.utils.nodes as pydglib_nodes_module
+from pydglib.utils.nodes import get_nodes_1d, get_nodes_2d
+
+
+class TestElementStateContainer1D:
+    def test_state_dimension_is_1_when_IC_is_a_function(self):
+        IC = lambda x: 2 * np.ones(x.size)
+        nodes = get_nodes_1d(4)
+        container = ElementStateContainer(IC, nodes)
+        assert container.dimension == 1
+
+    def test_state_dimension_matches_number_of_initial_conditions(self):
+        state_dimension = 4
+        IC = [lambda x: np.ones(x.size) for _ in range(state_dimension)]
+        nodes = get_nodes_1d(8)
+        container = ElementStateContainer(IC, nodes)
+        assert container.dimension == state_dimension
+
+    def test_initial_conditions_applied_pointwise_along_first_axis(self):
+        IC1 = lambda x: 3 * x**2
+        IC2 = lambda x: -2 * x + 4
+        nodes = get_nodes_1d(6)
+        container = ElementStateContainer([IC1, IC2], nodes)
+        for i, IC in enumerate([IC1, IC2]):
+            assert np.allclose(IC(nodes), container.state[:, i])
+
+    def test_gradients_initialized_to_zero(self):
+        state_dimension = 3
+        degree = 6
+        n_nodes = degree + 1
+        IC = [lambda x: np.ones(x.size) for _ in range(state_dimension)]
+        nodes = get_nodes_1d(degree)
+        container = ElementStateContainer(IC, nodes)
+        assert np.allclose(container.grad, np.zeros((n_nodes, state_dimension)))
+
+
+class TestElementStateContainer2D:
+    def test_state_dimension_is_1_when_IC_is_a_function(self):
+        IC = lambda x: 2 * np.ones(x.shape[0])
+        nodes = get_nodes_2d(4)
+        container = ElementStateContainer(IC, nodes)
+        assert container.dimension == 1
+
+    def test_state_dimension_matches_number_of_initial_conditions(self):
+        state_dimension = 4
+        IC = [lambda x: np.ones(x.shape[0]) for _ in range(state_dimension)]
+        nodes = get_nodes_2d(4)
+        container = ElementStateContainer(IC, nodes)
+        assert container.dimension == state_dimension
+
+    def test_initial_conditions_applied_pointwise_along_first_axis(self):
+        IC1 = lambda x: 3 * x[:, 0] ** 2 + 4 * x[:, 1] ** 2  # IC1(x,y) = 3x^2 + 4y^2
+        IC2 = lambda x: x[:, 0] - 2 * x[:, 1] + 1  # IC2(x,y) = x - 2y + 1
+        nodes = get_nodes_2d(3)
+        container = ElementStateContainer([IC1, IC2], nodes)
+        for i, IC in enumerate([IC1, IC2]):
+            assert np.allclose(IC(nodes), container.state[:, i])
+
+    def test_gradients_initialized_to_zero(self):
+        state_dimension = 3
+        degree = 6
+        n_nodes = int(0.5 * (degree + 1) * (degree + 2))
+        IC = [lambda x: np.ones(x.shape[0]) for _ in range(state_dimension)]
+        nodes = get_nodes_2d(degree)
+        container = ElementStateContainer(IC, nodes)
+        assert np.allclose(container.grad, np.zeros((n_nodes, state_dimension)))
 
 
 class TestElement1D:
@@ -105,8 +176,8 @@ class TestElement1D:
         element = Element1D(id, n_nodes, xl, xr, ICs)
         assert isinstance(element.grad, np.ndarray)
         assert len(element.grad.shape) == 2
-        assert element.grad.shape[0] == len(ICs)
-        assert element.grad.shape[1] == n_nodes
+        assert element.grad.shape[0] == n_nodes
+        assert element.grad.shape[1] == len(ICs)
 
     def test_initial_conditions_applied_when_state_is_1d(self):
         id = 0
@@ -127,8 +198,8 @@ class TestElement1D:
         y1 = 2 * y0
         ICs = [lambda _: y0, lambda _: y1]
         element = Element1D(id, n_nodes, xl, xr, ICs)
-        assert np.allclose(element.state[0], y0)
-        assert np.allclose(element.state[1], y1)
+        assert np.allclose(element.state[:, 0], y0)
+        assert np.allclose(element.state[:, 1], y1)
 
     def test_left_reference_None_by_default(self):
         id = 0
@@ -204,9 +275,9 @@ class TestElement1D:
             lambda x: 2 * np.ones_like(x),
         ]
         element = Element1D(id, n_nodes, xl, xr, ICs)
-        assert element[0, n_nodes - 1] == ICs[0](xr)
-        assert element[1, n_nodes - 1] == ICs[1](xr)
-        assert np.allclose(element[0], np.ones(n_nodes))
+        assert element[-1, 0] == ICs[0](xr)
+        assert element[-1, 1] == ICs[1](xr)
+        assert np.allclose(element[:, 0], np.ones(n_nodes))
 
     def test_setitem_sets_state_when_state_is_1d(self):
         id = 0
@@ -228,10 +299,10 @@ class TestElement1D:
             lambda x: 2 * np.ones_like(x),
         ]
         element = Element1D(id, n_nodes, xl, xr, ICs)
-        element[0, 1] = 7
-        element[1] = 3 * np.linspace(1, n_nodes, n_nodes)
-        assert element[0, 1] == 7
-        assert np.allclose(element[1], 3 * np.linspace(1, n_nodes, n_nodes))
+        element[1, 0] = 7
+        element[:, 1] = 3 * np.linspace(1, n_nodes, n_nodes)
+        assert element[1, 0] == 7
+        assert np.allclose(element[:, 1], 3 * np.linspace(1, n_nodes, n_nodes))
 
     def test_conversion_to_numpy_array(self):
         id = 0
@@ -536,8 +607,9 @@ class TestElement2D:
         element1 = Element2D(degree, v1, v2, v4, zero_IC)
         element2 = Element2D(degree, v2, v3, v4, zero_IC)
 
-        element1.state = np.array([1, 2, 3, 4, 5, 6])
-        element2.state = np.array([1, 2, 3, 4, 5, 6])
+        # Manually override state so that we can test if it is properly retrieved
+        element1._state_container.state = np.array([1, 2, 3, 4, 5, 6])
+        element2._state_container.state = np.array([1, 2, 3, 4, 5, 6])
 
         element1.edges[1] = Element2DInterface(element1, element2, 1, 2)
         element2.edges[2] = Element2DInterface(element2, element1, 2, 1)

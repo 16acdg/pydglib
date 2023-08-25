@@ -25,8 +25,8 @@ def test_odeint_returns_3d_numpy_array_when_state_is_1d():
 
     assert isinstance(soln, np.ndarray)
     assert len(soln.shape) == 3
-    assert soln.shape[1] == n_nodes
-    assert soln.shape[2] == n_elements
+    assert soln.shape[1] == n_elements
+    assert soln.shape[2] == n_nodes
 
 
 def test_odeint_returns_4d_numpy_array_when_state_is_2d():
@@ -47,9 +47,9 @@ def test_odeint_returns_4d_numpy_array_when_state_is_2d():
 
     assert isinstance(soln, np.ndarray)
     assert len(soln.shape) == 4
-    assert soln.shape[1] == len(ICs)
+    assert soln.shape[1] == n_elements
     assert soln.shape[2] == n_nodes
-    assert soln.shape[3] == n_elements
+    assert soln.shape[3] == len(ICs)
 
 
 # From https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.odeint.html
@@ -62,7 +62,8 @@ def scipy_pend(y, t, b, c):
 def pend1d(grid: Grid1D, t, b, c):
     u = grid.elements[0]  # Only one element needed for ODE
     theta, omega = u
-    u.grad = np.array([[omega, -b * omega - c * np.sin(theta)]])
+    gradient = np.array([[omega, -b * omega - c * np.sin(theta)]])
+    u.update_gradients(gradient)
 
 
 def test_odeint_solves_1d_pendulum_system():
@@ -79,7 +80,7 @@ def test_odeint_solves_1d_pendulum_system():
     n_nodes = 2
     IC = lambda _: y0
     grid = Grid1D(VX, EToV, n_nodes, IC)
-    soln = odeint(pend1d, grid, final_time, dt, args=(b, c))[:, :, 0]
+    soln = odeint(pend1d, grid, final_time, dt, args=(b, c))[:, 0, :]
 
     assert scipy_soln.shape == soln.shape
     assert np.allclose(scipy_soln, soln, atol=1e-3, rtol=0)
@@ -87,10 +88,11 @@ def test_odeint_solves_1d_pendulum_system():
 
 def pend2d(grid: Grid1D, t, b0, c0, b1, c1):
     u = grid.elements[0]  # Only one element needed for ODE
-    theta0, omega0 = u[0]
-    theta1, omega1 = u[1]
-    u.grad[0] = np.array([omega0, -b0 * omega0 - c0 * np.sin(theta0)])
-    u.grad[1] = np.array([omega1, -b1 * omega1 - c1 * np.sin(theta1)])
+    theta0, omega0 = u[:, 0]
+    theta1, omega1 = u[:, 1]
+    gradient0 = np.array([omega0, -b0 * omega0 - c0 * np.sin(theta0)])
+    gradient1 = np.array([omega1, -b1 * omega1 - c1 * np.sin(theta1)])
+    u.update_gradients(gradient0, gradient1)
 
 
 def test_odeint_solves_multid_pendulum_system():
@@ -115,7 +117,7 @@ def test_odeint_solves_multid_pendulum_system():
         lambda _: y0,
     ]
     grid = Grid1D(VX, EToV, n_nodes, ICs)
-    soln = odeint(pend2d, grid, final_time, dt, args=(b0, c0, b1, c1))[:, :, :, 0]
+    soln = odeint(pend2d, grid, final_time, dt, args=(b0, c0, b1, c1))[:, 0, :, :]
 
-    assert np.allclose(scipy_soln0, soln[:, 0, :], atol=1e-3, rtol=0)
-    assert np.allclose(scipy_soln1, soln[:, 1, :], atol=1e-3, rtol=0)
+    assert np.allclose(scipy_soln0, soln[:, :, 0], atol=1e-3, rtol=0)
+    assert np.allclose(scipy_soln1, soln[:, :, 1], atol=1e-3, rtol=0)

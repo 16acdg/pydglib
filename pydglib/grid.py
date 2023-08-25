@@ -1,7 +1,7 @@
 from typing import Tuple, Callable, List, Union
 import numpy as np
 
-from pydglib.element import Element1D, Element2D, Element2DInterface
+from pydglib.element import Element1D, Element2D, Element2DInterface, InitialConditions
 from pydglib.utils.nodes import get_nodes_2d
 
 
@@ -79,9 +79,9 @@ class Grid1D:
     @property
     def nodes(self) -> np.ndarray:
         """Returns the node positions of all elements in this grid as a 2d numpy array."""
-        out = np.zeros((self.n_nodes, self.n_elements), dtype=self.dtype)
-        for k in range(self.n_elements):
-            out[:, k] = self.elements[k].nodes
+        out = np.zeros((self.n_elements, self.n_nodes))
+        for i, element in enumerate(self.elements):
+            out[i] = element.nodes
         return out
 
     @property
@@ -92,26 +92,18 @@ class Grid1D:
     @property
     def grad(self) -> np.ndarray:
         """Returns the gradients of all elements in this grid as a 2d numpy array."""
-        if self.state_dimension == 1:
-            out = np.zeros((self.n_nodes, self.n_elements), dtype=self.dtype)
-            for k in range(self.n_elements):
-                out[:, k] = self.elements[k].grad
-        else:
-            out = np.zeros(
-                (self.state_dimension, self.n_nodes, self.n_elements), dtype=self.dtype
-            )
-            for k in range(self.n_elements):
-                for i in range(self.state_dimension):
-                    out[i, :, k] = self.elements[k].grad[i]
+        out = np.zeros(self.shape)
+        for i, element in enumerate(self.elements):
+            out[i] = element.grad
         return out
 
     @property
     def shape(self) -> Tuple:
         """Returns the shape of the grid's state."""
         if self.state_dimension == 1:
-            return (self.n_nodes, self.n_elements)
+            return (self.n_elements, self.n_nodes)
         else:
-            return (self.state_dimension, self.n_nodes, self.n_elements)
+            return (self.n_elements, self.n_nodes, self.state_dimension)
 
     def __array__(self, dtype=None) -> np.ndarray:
         """
@@ -123,19 +115,9 @@ class Grid1D:
         Returns:
             np.ndarray: This Grid1D instance as a numpy array.
         """
-        if dtype is None:
-            dtype = self.dtype
-        if self.state_dimension == 1:
-            out = np.zeros((self.n_nodes, self.n_elements), dtype=dtype)
-            for k in range(self.n_elements):
-                out[:, k] = self.elements[k].state
-        else:
-            out = np.zeros(
-                (self.state_dimension, self.n_nodes, self.n_elements), dtype=dtype
-            )
-            for k in range(self.n_elements):
-                for i in range(self.state_dimension):
-                    out[i, :, k] = self.elements[k].state[i]
+        out = np.zeros(self.shape)
+        for i, element in enumerate(self.elements):
+            out[i] = element.state
         return out
 
     def __repr__(self) -> str:
@@ -248,7 +230,7 @@ class Grid2D:
         VY: np.ndarray,
         EToV: np.ndarray,
         degree: int,
-        IC: Union[Callable, List[Callable]],
+        IC: InitialConditions,
     ):
         """
         Creates a new Grid2D instance.
@@ -258,7 +240,7 @@ class Grid2D:
             VY (np.ndarray): y coordinates of grid vertices.
             EToV (np.ndarray): Element-to-vertex map.
             degree (int): Degree of the local polynomial approximation.
-            IC (Callable): Initial conditions. Must support 1d and 2d array inputs.
+            IC (InitialConditions): Initial conditions. Must support 1d and 2d array inputs.
                 If input to `IC` is 1d, then the array must be length 2 and the function must return a float.
                 If input to `IC` is 2d, the second dimension of the array must be length 2 and it must return a 1d numpy array,
                 where the length of the 1d array equals the size of the input array's first dimension.
@@ -272,7 +254,7 @@ class Grid2D:
         self.n_elements = EToV.shape[0]
         self.n_edge_nodes = degree + 1  # per element
         self.n_nodes = int(0.5 * (degree + 1) * (degree + 2))  # per element
-        self.state_dimension = 1 if isinstance(self.IC, Callable) else len(self.IC)
+        self.state_dimension = 1 if callable(self.IC) else len(self.IC)
 
         # Create graph of elements (ie set references between adjacent elements)
         self.elements: List[Element2D] = create_elements_2d(degree, VX, VY, EToV, IC)
@@ -281,9 +263,9 @@ class Grid2D:
     @property
     def nodes(self) -> np.ndarray:
         """Returns the positions of all nodes of all elements in this grid as a 2d numpy array."""
-        out = np.zeros((self.n_nodes, self.n_elements, 2))
+        out = np.zeros((self.n_elements, self.n_nodes, 2))
         for i, element in enumerate(self.elements):
-            out[:, i, :] = element.nodes
+            out[i] = element.nodes
         return out
 
     @property
@@ -294,24 +276,18 @@ class Grid2D:
     @property
     def grad(self) -> np.ndarray:
         """Returns the gradients of all elements in this grid as a 2d numpy array."""
-        if self.state_dimension == 1:
-            out = np.zeros((self.n_nodes, self.n_elements))
-            for i, element in enumerate(self.elements):
-                out[:, i] = element.grad
-        else:
-            out = np.zeros((self.state_dimension, self.n_nodes, self.n_elements))
-            for k in range(self.n_elements):
-                for i in range(self.state_dimension):
-                    out[i, :, k] = self.elements[k].grad[i]
+        out = np.zeros(self.shape)
+        for i, element in enumerate(self.elements):
+            out[i] = element.grad
         return out
 
     @property
-    def shape(self) -> Tuple:
+    def shape(self) -> Tuple[float, ...]:
         """Returns the shape of the grid's state."""
         if self.state_dimension == 1:
-            return (self.n_nodes, self.n_elements)
+            return (self.n_elements, self.n_nodes)
         else:
-            return (self.state_dimension, self.n_nodes, self.n_elements)
+            return (self.n_elements, self.n_nodes, self.state_dimension)
 
     def __array__(self, dtype: np.dtype = None) -> np.ndarray:
         """
@@ -323,15 +299,9 @@ class Grid2D:
         Returns:
             np.ndarray: This Grid2D instance as a numpy array.
         """
-        if self.state_dimension == 1:
-            out = np.zeros((self.n_nodes, self.n_elements))
-            for i, element in enumerate(self.elements):
-                out[:, i] = element.state
-        else:
-            out = np.zeros((self.state_dimension, self.n_nodes, self.n_elements))
-            for k in range(self.n_elements):
-                for i in range(self.state_dimension):
-                    out[i, :, k] = self.elements[k].state[i]
+        out = np.zeros(self.shape)
+        for i, element in enumerate(self.elements):
+            out[i] = element.state
         return out
 
     def __repr__(self) -> str:

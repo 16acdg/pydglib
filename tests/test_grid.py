@@ -104,13 +104,12 @@ class TestGrid1D:
             EToV[i, 1] = i + 1
         IC = lambda x: np.zeros_like(x)
         grid = Grid1D(VX, EToV, n_nodes, IC)
-
         assert isinstance(grid.nodes, np.ndarray)
         assert len(grid.nodes.shape) == 2
-        assert grid.nodes.shape[0] == n_nodes
-        assert grid.nodes.shape[1] == n_elements
+        assert grid.nodes.shape[0] == n_elements
+        assert grid.nodes.shape[1] == n_nodes
         for i in range(n_elements):
-            assert np.allclose(grid.nodes[:, i], grid.elements[i].nodes)
+            assert np.allclose(grid.nodes[i], grid.elements[i].nodes)
 
     def test_state_property_returns_matrix_of_all_elements_states_1d(self):
         xl = 0.1
@@ -127,10 +126,10 @@ class TestGrid1D:
 
         assert isinstance(grid.state, np.ndarray)
         assert len(grid.state.shape) == 2
-        assert grid.state.shape[0] == n_nodes
-        assert grid.state.shape[1] == n_elements
+        assert grid.state.shape[0] == n_elements
+        assert grid.state.shape[1] == n_nodes
         for i in range(n_elements):
-            assert np.allclose(grid.state[:, i], grid.elements[i])
+            assert np.allclose(grid.state[i], grid.elements[i])
 
     def test_state_property_returns_matrix_of_all_elements_states_multid(self):
         xl = 0.1
@@ -150,18 +149,18 @@ class TestGrid1D:
 
         assert isinstance(grid.state, np.ndarray)
         assert len(grid.state.shape) == 3
-        assert grid.state.shape[0] == len(ICs)
+        assert grid.state.shape[0] == n_elements
         assert grid.state.shape[1] == n_nodes
-        assert grid.state.shape[2] == n_elements
-        for i in range(len(ICs)):
-            for j in range(n_elements):
-                assert np.allclose(grid.state[i, :, j], grid.elements[j][i])
+        assert grid.state.shape[2] == len(ICs)
+        for i in range(n_elements):
+            for j in range(len(ICs)):
+                assert np.allclose(grid.state[i, :, j], grid.elements[i][:, j])
 
     def test_grad_property_returns_matrix_of_all_elements_gradients_1d(self):
         xl = 0.1
         xr = 0.9
         n_elements = 3
-        n_nodes = 3
+        n_nodes = 7
         VX = np.linspace(xl, xr, n_elements + 1)
         EToV = np.zeros((n_elements, 2))
         for i in range(n_elements):
@@ -172,10 +171,10 @@ class TestGrid1D:
 
         assert isinstance(grid.grad, np.ndarray)
         assert len(grid.grad.shape) == 2
-        assert grid.grad.shape[0] == n_nodes
-        assert grid.grad.shape[1] == n_elements
+        assert grid.grad.shape[0] == n_elements
+        assert grid.grad.shape[1] == n_nodes
         for i in range(n_elements):
-            assert np.allclose(grid.grad[:, i], grid.elements[i].grad)
+            assert np.allclose(grid.grad[i], grid.elements[i].grad)
 
     def test_grad_property_returns_matrix_of_all_elements_gradients_multid(self):
         xl = 0.1
@@ -195,12 +194,12 @@ class TestGrid1D:
 
         assert isinstance(grid.grad, np.ndarray)
         assert len(grid.grad.shape) == 3
-        assert grid.grad.shape[0] == len(ICs)
+        assert grid.grad.shape[0] == n_elements
         assert grid.grad.shape[1] == n_nodes
-        assert grid.grad.shape[2] == n_elements
-        for i in range(len(ICs)):
-            for j in range(n_elements):
-                assert np.allclose(grid.grad[i, :, j], grid.elements[j].grad[i])
+        assert grid.grad.shape[2] == len(ICs)
+        for i in range(n_elements):
+            for j in range(len(ICs)):
+                assert np.allclose(grid.grad[i, :, j], grid.elements[i].grad[:, j])
 
     def test_shape_property_matches_state_shape_1d(self):
         xl = 0.1
@@ -211,8 +210,8 @@ class TestGrid1D:
         IC = lambda _: np.linspace(9, 10, n_nodes)
         grid = Grid1D(VX, EToV, n_nodes, IC)
         assert len(grid.shape) == 2
-        assert grid.shape[0] == n_nodes
-        assert grid.shape[1] == n_elements
+        assert grid.shape[0] == n_elements
+        assert grid.shape[1] == n_nodes
 
     def test_shape_property_matches_state_shape_multid(self):
         xl = 0.1
@@ -226,9 +225,9 @@ class TestGrid1D:
         ]
         grid = Grid1D(VX, EToV, n_nodes, ICs)
         assert len(grid.shape) == 3
-        assert grid.shape[0] == len(ICs)
+        assert grid.shape[0] == n_elements
         assert grid.shape[1] == n_nodes
-        assert grid.shape[2] == n_elements
+        assert grid.shape[2] == len(ICs)
 
     def test_conversion_to_numpy_array_when_state_is_1d(self):
         xl = 0.1
@@ -397,8 +396,8 @@ class TestGrid2D:
         grid = Grid2D(VX, VY, EToV, degree, lambda x: np.ones(x.shape[0]))
         assert isinstance(grid.nodes, np.ndarray)
         assert len(grid.nodes.shape) == 3
-        assert grid.nodes.shape[0] == n_nodes
-        assert grid.nodes.shape[1] == n_elements
+        assert grid.nodes.shape[0] == n_elements
+        assert grid.nodes.shape[1] == n_nodes
         assert grid.nodes.shape[2] == 2
 
     def test_state_property_returns_matrix_of_all_elements_states(self):
@@ -409,8 +408,8 @@ class TestGrid2D:
         grid = Grid2D(VX, VY, EToV, degree, lambda x: np.ones(x.shape[0]))
         assert isinstance(grid.state, np.ndarray)
         assert len(grid.state.shape) == 2
-        assert grid.state.shape[0] == n_nodes
-        assert grid.state.shape[1] == n_elements
+        assert grid.state.shape[0] == n_elements
+        assert grid.state.shape[1] == n_nodes
         assert grid.state[5, 4] == 1
 
     def test_grad_property_returns_matrix_of_all_elements_gradients(self):
@@ -421,8 +420,8 @@ class TestGrid2D:
         grid = Grid2D(VX, VY, EToV, degree, lambda x: np.ones(x.shape[0]))
         assert isinstance(grid.grad, np.ndarray)
         assert len(grid.grad.shape) == 2
-        assert grid.grad.shape[0] == n_nodes
-        assert grid.grad.shape[1] == n_elements
+        assert grid.grad.shape[0] == n_elements
+        assert grid.grad.shape[1] == n_nodes
         assert grid.grad[3, 4] == 0
 
     def test_conversion_to_numpy_array(self):
@@ -434,6 +433,6 @@ class TestGrid2D:
         arr = np.array(grid)
         assert isinstance(arr, np.ndarray)
         assert len(arr.shape) == 2
-        assert arr.shape[0] == n_nodes
-        assert arr.shape[1] == n_elements
+        assert arr.shape[0] == n_elements
+        assert arr.shape[1] == n_nodes
         assert arr[5, 4] == 1

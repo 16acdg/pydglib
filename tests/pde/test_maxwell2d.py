@@ -27,9 +27,9 @@ class TestSolve:
 
         # Solve using solver and extract final state
         soln, nodes = solve(x0, x1, y0, y1, IC, final_time, n_elements, degree)
-        Hx_pred = soln[-1, 0]
-        Hy_pred = soln[-1, 1]
-        Ez_pred = soln[-1, 2]
+        Hx_pred = soln[-1, :, :, 0]
+        Hy_pred = soln[-1, :, :, 1]
+        Ez_pred = soln[-1, :, :, 2]
 
         Hx_correct = load("maxwell2d_Hx_t1.npy")
         Hy_correct = load("maxwell2d_Hy_t1.npy")

@@ -50,19 +50,11 @@ def odeint(
     time = 0  # running time
     nt = math.ceil(final_time / dt)
 
-    # Set shape of storage arrays based on dimensionality of grid state
-    if grid.state_dimension == 1:
-        resu_shape = (grid.n_elements, grid.n_nodes)
-        soln_shape = (nt + 1, grid.n_nodes, grid.n_elements)
-    else:
-        resu_shape = (grid.n_elements, grid.state_dimension, grid.n_nodes)
-        soln_shape = (nt + 1, grid.state_dimension, grid.n_nodes, grid.n_elements)
-
     # RK residual storage
-    resu = np.zeros(resu_shape)  # , dtype=np.float64)
+    resu = np.zeros(grid.shape)
 
     # save solution for each time step
-    soln = np.zeros(soln_shape)  # , dtype=np.float64)
+    soln = np.zeros((nt + 1, *grid.shape))
 
     # Save initial conditions to solution array
     soln[0] = grid.state
