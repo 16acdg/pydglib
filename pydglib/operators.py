@@ -10,8 +10,6 @@ from pydglib.utils.polynomials import (
     Polynomial,
 )
 
-from pydglib.element import get_reference_triangle
-
 
 def _get_orthonormal_poly_basis_1d(
     degree: int,
@@ -232,20 +230,16 @@ def get_LIFT_2d(degree: int) -> np.ndarray:
     n_nodes = int(0.5 * (degree + 1) * (degree + 2))
     n_edge_nodes = degree + 1
 
-    nodes = get_nodes_2d(degree)
+    nodes, *edge_node_indices = get_nodes_2d(degree, include_boundary=True)
     V = Vandermonde2D(degree, nodes[:, 0], nodes[:, 1])
     M_inv = V @ V.T
 
     Emat = np.zeros((n_nodes, 3 * n_edge_nodes))
     M_edge = get_edge_mass_matrix_2d(degree)
 
-    reference_element = get_reference_triangle(degree)
-
-    Emat[reference_element._edge_node_indicies[0], :n_edge_nodes] = M_edge
-    Emat[
-        reference_element._edge_node_indicies[1], n_edge_nodes : 2 * n_edge_nodes
-    ] = M_edge
-    Emat[reference_element._edge_node_indicies[2], 2 * n_edge_nodes :] = M_edge
+    Emat[edge_node_indices[0], :n_edge_nodes] = M_edge
+    Emat[edge_node_indices[1], n_edge_nodes : 2 * n_edge_nodes] = M_edge
+    Emat[edge_node_indices[2], 2 * n_edge_nodes :] = M_edge
 
     LIFT = M_inv @ Emat
 

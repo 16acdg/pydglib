@@ -661,11 +661,11 @@ class TestElement2D:
         assert len(element.nodes.shape) == 2
         assert element.nodes.shape[0] == n_nodes
         assert element.nodes.shape[1] == 2
-        assert len(element._edge_node_indicies) == 3
-        for indicies in element._edge_node_indicies:
-            assert isinstance(indicies, np.ndarray)
-            assert len(indicies.shape) == 1
-            assert indicies.shape[0] == n_edge_nodes
+        assert len(element._edge_node_indices) == 3
+        for indices in element._edge_node_indices:
+            assert isinstance(indices, np.ndarray)
+            assert len(indices.shape) == 1
+            assert indices.shape[0] == n_edge_nodes
 
     def test_geometric_factors_are_accessible_as_instance_properties(self):
         v1 = np.array([0, 0])

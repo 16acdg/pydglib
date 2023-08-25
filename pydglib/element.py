@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Callable, Tuple, List, Union
 import numpy as np
@@ -58,64 +59,11 @@ class ElementStateContainer:
                 self.state[:, i] = IC[i](nodes)
 
 
-class Element1D:
-    def __init__(
-        self,
-        id,
-        Np,
-        xl,
-        xr,
-        IC,
-        left=None,
-        right=None,
-        dtype=np.float64,
-    ):
-        """
-        Create a new Element1D instance.
-
-        Args:
-            id (int): Global identifier for this element.
-            Np (int): Number of nodes for this element.
-            xl (float): Left position of element in physical domain.
-            xr (float): Right position of element in physical domain.
-            IC (Callable or List[Callable]): Initial conditions for the state of this element.
-                If state's dimension = 1, then IC must be a function.
-                If state's dimension > 1, then IC must be a list of functions, one for each dimension of state.
-            left (Element1D, optionl): Reference to the element's left neighbour. Defaults to None.
-            right (Element1D, optionl): Reference to the element's right neighbour. Defaults to None.
-            dtype (np.dtype, optional): Data type of this element's state. Defaults to np.float64.
-        """
-        assert Np > 0
-        assert xl < xr
-        assert isinstance(IC, Callable) or isinstance(IC, List)
-
-        self.id = id
-        self.Np = Np
-        self.xl = xl
-        self.xr = xr
-        self.IC = IC
-        self.dtype = dtype
-
-        # self.state_dimension = 1 if isinstance(self.IC, Callable) else len(self.IC)
-        self.nodes = computational_to_physical_1d(
-            get_nodes_1d(self.Np - 1), self.xl, self.xr
-        )
-        self._state_container = ElementStateContainer(IC, self.nodes)
-
-        # Reference to element at the left and right boundaries of this element
-        self.left = left
-        self.right = right
-
-    @property
-    def n_nodes(self) -> int:
-        return self.Np
-
-    @property
-    def h(self) -> float:
-        return self.xr - self.xl
-
-    def __repr__(self) -> str:
-        return f"Element({self.state}, grad={self.grad})"
+class Element(ABC):
+    def __init__(self, degree: int, nodes: np.ndarray, IC: InitialConditions):
+        self.degree = degree
+        self.nodes = nodes
+        self._state_container = ElementStateContainer(IC, nodes)
 
     def __iadd__(self, other):
         self._state_container.state += other
@@ -135,13 +83,11 @@ class Element1D:
         return self._state_container.state
 
     def __len__(self) -> int:
-        return self.Np
+        return self.n_nodes
 
-    def is_leftmost(self) -> bool:
-        return self.left is None and self.right is not None
-
-    def is_rightmost(self) -> bool:
-        return self.left is not None and self.right is None
+    @property
+    def n_nodes(self) -> int:
+        return self.nodes.shape[0]
 
     @property
     def state_dimension(self) -> int:
@@ -176,6 +122,63 @@ class Element1D:
         else:
             for i, gradient in enumerate(gradients):
                 self._state_container.grad[:, i] = gradient
+
+
+class Element1D(Element):
+    def __init__(
+        self,
+        id,
+        Np,
+        xl,
+        xr,
+        IC: InitialConditions,
+        left=None,
+        right=None,
+        dtype=np.float64,
+    ):
+        """
+        Create a new Element1D instance.
+
+        Args:
+            id (int): Global identifier for this element.
+            Np (int): Number of nodes for this element.
+            xl (float): Left position of element in physical domain.
+            xr (float): Right position of element in physical domain.
+            IC (InitialConditions): Initial conditions for the state of this element.
+            left (Element1D, optional): Reference to the element's left neighbour. Defaults to None.
+            right (Element1D, optional): Reference to the element's right neighbour. Defaults to None.
+            dtype (np.dtype, optional): Data type of this element's state. Defaults to np.float64.
+        """
+        assert Np > 0
+        assert xl < xr
+        assert isinstance(IC, Callable) or isinstance(IC, List)
+
+        # Create nodes
+        degree = Np - 1
+        nodes = computational_to_physical_1d(get_nodes_1d(degree), xl, xr)
+
+        super().__init__(degree, nodes, IC)
+
+        self.id = id
+        self.Np = Np
+        self.xl = xl
+        self.xr = xr
+        self.IC = IC
+        self.dtype = dtype
+
+        # Reference to element at the left and right boundaries of this element
+        self.left = left
+        self.right = right
+
+    @property
+    def h(self) -> float:
+        return self.xr - self.xl
+
+    def is_leftmost(self) -> bool:
+        return self.left is None and self.right is not None
+
+    def is_rightmost(self) -> bool:
+        return self.left is not None and self.right is None
 
 
 class Element2DInterface:
@@ -213,7 +216,7 @@ class ElementGeometry2D:
         self.Fscale = [l / self.area for l in self.edge_lengths]
 
 
-class Element2D:
+class Element2D(Element):
     def __init__(
         self,
         degree: int,
@@ -247,27 +250,21 @@ class Element2D:
             b2_nodes (np.ndarray, optional): Inidicies of nodes that are on the second edge.
             b3_nodes (np.ndarray, optional): Inidicies of nodes that are on the third edge.
         """
-        self.degree = degree
+        # Create nodes
+        if nodes is None:
+            nodes, *edge_node_indices = get_nodes_2d(degree, include_boundary=True)
+        else:
+            edge_node_indices = [b1_nodes, b2_nodes, b3_nodes]
+        nodes = computational_to_physical_2d(nodes, v1, v2, v3)
+
+        super().__init__(degree, nodes, IC)
+
+        self._edge_node_indices: List[np.ndarray] = edge_node_indices
+
         self._geometry = ElementGeometry2D(v1, v2, v3)
 
         # Boundaries either save reference to an adjacent element or None, if edge is a physical boundary.
         self.edges: List[Element2DInterface | None] = [None, None, None]
-
-        # Create nodes for this element
-        if nodes is None:
-            self.nodes, b1_nodes, b2_nodes, b3_nodes = get_nodes_2d(
-                self.degree, include_boundary=True
-            )
-        else:
-            self.nodes = nodes
-        self.nodes = computational_to_physical_2d(self.nodes, v1, v2, v3)
-        self._edge_node_indicies: List[np.ndarray] = [b1_nodes, b2_nodes, b3_nodes]
-
-        self._state_container = ElementStateContainer(IC, self.nodes)
-
-    @property
-    def n_nodes(self) -> int:
-        return self.nodes.shape[0]
 
     @property
     def area(self) -> float:
@@ -307,66 +304,12 @@ class Element2D:
 
     def get_edge_nodes(self, edge: int) -> np.ndarray:
         assert edge in [0, 1, 2]
-        return self.nodes[self._edge_node_indicies[edge]]
+        return self.nodes[self._edge_node_indices[edge]]
 
     def get_edge(self, edge: int) -> np.ndarray:
         """Returns the state of this element on the specified edge."""
         assert edge in [0, 1, 2]
-        return self.state[self._edge_node_indicies[edge]]
-
-    def __iadd__(self, other):
-        self._state_container.state += other
-        return self
-
-    def __imul__(self, other):
-        self._state_container.state *= other
-        return self
-
-    def __getitem__(self, index) -> np.ndarray:
-        return self._state_container.state[index]
-
-    def __setitem__(self, index, new_value):
-        self._state_container.state[index] = new_value
-
-    def __array__(self, dtype=None) -> np.ndarray:
-        return self._state_container.state
-
-    def __len__(self) -> int:
-        return self.n_nodes
-
-    @property
-    def state_dimension(self) -> int:
-        return self._state_container.dimension
-
-    @property
-    def state(self) -> np.ndarray:
-        return self._state_container.state
-
-    @property
-    def grad(self) -> np.ndarray:
-        return self._state_container.grad
-
-    def update_gradients(self, *gradients):
-        """
-        Updates the gradients of this element.
-
-        Args:
-            gradients (np.ndarray): Updated gradient vectors.
-                Must supply gradients for all state dimensions.
-                Each gradient vector must be a 1d numpy array and contain the derivative of the nodal value at each respective index.
-        """
-        assert len(gradients) == self.state_dimension
-
-        for gradient in gradients:
-            assert isinstance(gradient, np.ndarray)
-            assert gradient.size == self.n_nodes
-
-        if len(gradients) == 1:
-            self._state_container.grad = gradients[0]
-
-        else:
-            for i, gradient in enumerate(gradients):
-                self._state_container.grad[:, i] = gradient
+        return self.state[self._edge_node_indices[edge]]
 
 
 class Element2DInterface:
@@ -399,16 +342,16 @@ class Element2DInterface:
     @staticmethod
     def _create_node_map_for_interface(
         interior_nodes: np.ndarray,
-        interior_node_indicies: np.ndarray,
+        interior_node_indices: np.ndarray,
         exterior_nodes: np.ndarray,
-        exterior_node_indicies: np.ndarray,
+        exterior_node_indices: np.ndarray,
     ) -> np.ndarray:
         """
         Creates a 2d numpy array that maps indicies of interior nodes to the index of the closest exterior node.
         """
         n_nodes = interior_nodes.shape[0]
         node_map = np.zeros((n_nodes, 2), dtype=np.int32)
-        node_map[:, 0] = interior_node_indicies
+        node_map[:, 0] = interior_node_indices
 
         # Create matrix of distances between all nodes on boundary
         distances = np.zeros((n_nodes, n_nodes))
@@ -418,7 +361,7 @@ class Element2DInterface:
 
         # Match interior nodes with closest exterior node
         closest = np.argmin(distances, axis=1)
-        node_map[:, 1] = exterior_node_indicies[closest]
+        node_map[:, 1] = exterior_node_indices[closest]
 
         return node_map
 
@@ -437,8 +380,8 @@ class Element2DInterface:
         i_nodes = self.interior_element.get_edge_nodes(self.interior_edge)
         e_nodes = self.exterior_element.get_edge_nodes(self.exterior_edge)
 
-        i_node_indicies = self.interior_element._edge_node_indicies[self.interior_edge]
-        e_node_indicies = self.exterior_element._edge_node_indicies[self.exterior_edge]
+        i_node_indicies = self.interior_element._edge_node_indices[self.interior_edge]
+        e_node_indicies = self.exterior_element._edge_node_indices[self.exterior_edge]
 
         node_map = Element2DInterface._create_node_map_for_interface(
             i_nodes, i_node_indicies, e_nodes, e_node_indicies
@@ -447,12 +390,12 @@ class Element2DInterface:
         return node_map
 
     def get_external_state(self) -> np.ndarray:
-        node_indicies = self._node_map[:, 1]
-        return self.exterior_element.state[node_indicies]
+        node_indices = self._node_map[:, 1]
+        return self.exterior_element.state[node_indices]
 
     def get_internal_state(self) -> np.ndarray:
-        node_indicies = self._node_map[:, 0]
-        return self.exterior_element.state[node_indicies]
+        node_indices = self._node_map[:, 0]
+        return self.exterior_element.state[node_indices]
 
 
 def get_reference_triangle(degree: int) -> Element2D:
