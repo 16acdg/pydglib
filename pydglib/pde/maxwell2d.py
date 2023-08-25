@@ -58,18 +58,6 @@ def Grad2D(
     return ux, uy
 
 
-def GeometricFactors2D(element: Element2D):
-    v1, v2, v3 = element.vertices
-    xr, yr = (v2 - v1) / 2
-    xs, ys = (v3 - v1) / 2
-    J = xr * ys - xs * yr
-    rx = ys / J
-    ry = -xs / J
-    sx = -yr / J
-    sy = xr / J
-    return rx, sx, ry, sy, J
-
-
 def compute_surface_terms(element, LIFT, Dr, Ds):
     n_edge_nodes = element.degree + 1
     n_nodes = element.n_nodes
@@ -82,14 +70,6 @@ def compute_surface_terms(element, LIFT, Dr, Ds):
     fluxHx = np.zeros((3, n_edge_nodes))
     fluxHy = np.zeros((3, n_edge_nodes))
     fluxEz = np.zeros((3, n_edge_nodes))
-
-    Fscale = np.array(
-        [
-            element.edge1_length / element.area,
-            element.edge2_length / element.area,
-            element.edge3_length / element.area,
-        ]
-    )
 
     # Define field differences at faces
     for i, edge in enumerate(element.edges):
@@ -107,9 +87,9 @@ def compute_surface_terms(element, LIFT, Dr, Ds):
         # Evaluate upwind fluxes
         nx, ny = element.normals[i]
         ndotdH = nx * dHx + ny * dHy
-        fluxHx[i] = Fscale[i] * (ny * dEz + nx * ndotdH - dHx)
-        fluxHy[i] = Fscale[i] * (-nx * dEz + ny * ndotdH - dHy)
-        fluxEz[i] = Fscale[i] * (-nx * dHy + ny * dHx - dEz)
+        fluxHx[i] = element.Fscale[i] * (ny * dEz + nx * ndotdH - dHx)
+        fluxHy[i] = element.Fscale[i] * (-nx * dEz + ny * ndotdH - dHy)
+        fluxEz[i] = element.Fscale[i] * (-nx * dHy + ny * dHx - dEz)
 
     # local derivatives of fields
     Ezx, Ezy = Grad2D(Ez, element.rx, element.sx, element.ry, element.sy, Dr, Ds)
@@ -162,24 +142,6 @@ def solve(x0, x1, y0, y1, IC, final_time, n_elements, degree):
     LIFT = get_LIFT_2d(degree)
 
     grid = Grid2D(VX, VY, EToV, degree, IC)
-
-    # Set geometric factors on elements
-    for element in grid.elements:
-        rx, sx, ry, sy, _ = GeometricFactors2D(element)
-        element.rx = rx
-        element.sx = sx
-        element.ry = ry
-        element.sy = sy
-
-    # Set side lengths on element
-    for element in grid.elements:
-        v1, v2, v3 = element.vertices
-        edge1 = v2 - v1
-        edge2 = v3 - v2
-        edge3 = v1 - v3
-        element.edge1_length = np.linalg.norm(edge1)
-        element.edge2_length = np.linalg.norm(edge2)
-        element.edge3_length = np.linalg.norm(edge3)
 
     x = grid.nodes
 

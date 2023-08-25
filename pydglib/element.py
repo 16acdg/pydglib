@@ -9,7 +9,6 @@ from .utils.transformations import (
 )
 from .utils.geometry import (
     get_area_of_triangle,
-    get_perimeter_of_triangle,
     get_outward_unit_normals_of_triangle,
 )
 
@@ -111,6 +110,37 @@ class Element2DInterface:
     pass
 
 
+class ElementGeometry2D:
+    def __init__(self, v1: np.ndarray, v2: np.ndarray, v3: np.ndarray):
+        self.vertices = [v1, v2, v3]
+        self.area = get_area_of_triangle(v1, v2, v3)
+        assert self.area > 0
+
+        self.edge_lengths = [np.linalg.norm(e) for e in [v2 - v1, v3 - v2, v1 - v3]]
+        self.perimeter = sum(self.edge_lengths)
+        self.normals = get_outward_unit_normals_of_triangle(v1, v2, v3)
+
+        # Partials of map from computational domain to physical domain
+        self.xr = (v2[0] - v1[0]) / 2
+        self.yr = (v2[1] - v1[1]) / 2
+        self.xs = (v3[0] - v1[0]) / 2
+        self.ys = (v3[1] - v1[1]) / 2
+
+        # Determinant of the Jacobian of the transformation from computational domain to physical domain
+        self.J = self.xr * self.ys - self.xs * self.yr
+
+        assert np.isclose(self.J, self.area / 2)
+
+        # Partials of map from physical domain to computational domain
+        self.rx = self.ys / self.J
+        self.ry = -self.xs / self.J
+        self.sx = -self.yr / self.J
+        self.sy = self.xr / self.J
+
+        # Ratio of surface Jacobian (along edges) to the Jacobian for the 2d mapping
+        self.Fscale = [l / self.area for l in self.edge_lengths]
+
+
 class Element2D:
     def __init__(
         self,
@@ -148,18 +178,7 @@ class Element2D:
             b3_nodes (np.ndarray, optional): Inidicies of nodes that are on the third edge.
         """
         self.degree = degree
-        self.vertices = [v1, v2, v3]
-
-        # Calculate the surface area and perimeter of the triangle v1, v2, v3.
-        self.perimeter = get_perimeter_of_triangle(v1, v2, v3)
-        self.area = get_area_of_triangle(v1, v2, v3)
-
-        # Radius of the inscribed circle for the triangle v1, v2, v3.
-        self.inscribed_radius = 2 * self.area / self.perimeter
-
-        # Set outward unit normals of triangle v1, v2, v3.
-        n1, n2, n3 = get_outward_unit_normals_of_triangle(v1, v2, v3)
-        self.normals = [n1, n2, n3]
+        self._geometry = ElementGeometry2D(v1, v2, v3)
 
         # Boundaries either save reference to an adjacent element or None, if edge is a physical boundary.
         self.edges: List[Element2DInterface | None] = [None, None, None]
@@ -192,6 +211,42 @@ class Element2D:
             for i in range(self.state_dimension):
                 self.state[i] = IC[i](self.nodes)
 
+    @property
+    def area(self) -> float:
+        return self._geometry.area
+
+    @property
+    def normals(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        return self._geometry.normals
+
+    @property
+    def perimeter(self) -> float:
+        return self._geometry.perimeter
+
+    @property
+    def vertices(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        return self._geometry.vertices
+
+    @property
+    def rx(self) -> float:
+        return self._geometry.rx
+
+    @property
+    def ry(self) -> float:
+        return self._geometry.ry
+
+    @property
+    def sx(self) -> float:
+        return self._geometry.sx
+
+    @property
+    def sy(self) -> float:
+        return self._geometry.sy
+
+    @property
+    def Fscale(self) -> np.ndarray:
+        return self._geometry.Fscale
+
     def get_edge_nodes(self, edge: int) -> np.ndarray:
         assert edge in [0, 1, 2]
         return self.nodes[self._edge_node_indicies[edge]]
@@ -203,15 +258,6 @@ class Element2D:
             return self.state[self._edge_node_indicies[edge]]
         else:
             return self.state[:, self._edge_node_indicies[edge]]
-
-    # def get_edge_external(self, edge: int) -> np.ndarray:
-    #     """Returns the neighbouring element's state along the given edge, if such an element exist. Otherwise raises exception."""
-    #     assert edge in [0, 1, 2]
-    #     edge_is_boundary = self.edges[edge] is None
-    #     if edge_is_boundary:
-    #         raise Exception("Attempting to access adjacent element that doesn't exist.")
-    #     else:
-    #         return self.edges[edge].get_external_state()
 
     def __iadd__(self, other):
         self.state += other
@@ -232,9 +278,6 @@ class Element2D:
 
     def __len__(self) -> int:
         return self.n_nodes
-
-    def __repr__(self) -> str:
-        return f"Element2D(n_nodes={self.n_nodes})"
 
 
 class Element2DInterface:

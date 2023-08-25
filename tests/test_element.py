@@ -2,7 +2,7 @@ from typing import Tuple
 import pytest
 import numpy as np
 
-from pydglib.element import Element1D, Element2D, Element2DInterface
+from pydglib.element import Element1D, Element2D, Element2DInterface, ElementGeometry2D
 import pydglib.utils.nodes as pydglib_nodes_module
 
 
@@ -289,6 +289,43 @@ class TestElement1D:
         assert not element.is_rightmost()
 
 
+class TestElementGeometry2D:
+    def get_geometric_factors():
+        return [
+            (
+                np.array([-1, -1]),
+                np.array([-0.75, -1]),
+                np.array([-0.75, -0.75]),
+                8,
+                -8,
+                0,
+                8,
+                np.array([8, 8, np.sqrt(2) * 8]),
+            ),
+            (
+                np.array([-1, -1]),
+                np.array([-0.75, -0.75]),
+                np.array([-1, -0.75]),
+                8,
+                0,
+                -8,
+                8,
+                np.array([np.sqrt(2) * 8, 8, 8]),
+            ),
+        ]
+
+    @pytest.mark.parametrize("v1,v2,v3,rx,ry,sx,sy,Fscale", get_geometric_factors())
+    def test_correct_values_of_geometric_factors_set(
+        self, v1, v2, v3, rx, ry, sx, sy, Fscale
+    ):
+        geometry = ElementGeometry2D(v1, v2, v3)
+        assert np.isclose(geometry.rx, rx)
+        assert np.isclose(geometry.ry, ry)
+        assert np.isclose(geometry.sx, sx)
+        assert np.isclose(geometry.sy, sy)
+        assert np.allclose(geometry.Fscale, Fscale)
+
+
 class TestElement2D:
     def test_raises_exception_for_invalid_physical_domain(self):
         degree = 2
@@ -488,23 +525,6 @@ class TestElement2D:
         assert np.allclose(element.get_edge(1), np.array([1, 0.5, 0]))
         assert np.allclose(element.get_edge(2), np.array([0, 0, 0]))
 
-    # def test_get_edge_external(self):
-    #     degree = 2
-    #     v1 = np.zeros(2)
-    #     v2 = np.array([1, 0])
-    #     v3 = np.ones(2)
-    #     v4 = np.array([0, 1])
-    #     IC1 = lambda x: x[:, 0] * x[:, 1]  # IC1(x,y) = x * y
-    #     IC2 = lambda x: 2 * x[:, 0] * x[:, 1]  # IC2(x,y) = 2 * x * y
-    #     element1 = Element2D(degree, v1, v2, v3, IC1)
-    #     element2 = Element2D(degree, v1, v3, v4, IC2)
-    #     element1.edges[2] = Element2DInterface(element1, element2, 2, 0)
-    #     edge = element1.get_edge_external(2)
-    #     assert isinstance(edge, np.ndarray)
-    #     assert len(edge.shape) == 1
-    #     assert edge.shape[0] == degree + 1
-    #     assert np.allclose(edge, np.flip(element2.get_edge(0)))
-
     def test_returns_correct_internal_and_external_state_when_degree_is_2(self):
         degree = 2
         v1 = np.array([0, 0])
@@ -574,6 +594,25 @@ class TestElement2D:
             assert isinstance(indicies, np.ndarray)
             assert len(indicies.shape) == 1
             assert indicies.shape[0] == n_edge_nodes
+
+    def test_geometric_factors_are_accessible_as_instance_properties(self):
+        v1 = np.array([0, 0])
+        v2 = np.array([1, 0])
+        v3 = np.array([1, 1])
+        element = Element2D(3, v1, v2, v3, lambda x: np.zeros(x.shape[0]))
+        assert np.isscalar(element.rx)
+        assert np.isscalar(element.ry)
+        assert np.isscalar(element.sx)
+        assert np.isscalar(element.sy)
+
+    def test_Fscale_is_accessible_as_an_instance_property(self):
+        v1 = np.array([0, 0])
+        v2 = np.array([1, 0])
+        v3 = np.array([1, 1])
+        element = Element2D(3, v1, v2, v3, lambda x: np.zeros(x.shape[0]))
+        assert len(element.Fscale) == 3
+        for f in element.Fscale:
+            assert np.isscalar(f)
 
 
 class TestElement2DInterface:
