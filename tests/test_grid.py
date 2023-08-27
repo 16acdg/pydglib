@@ -254,7 +254,7 @@ class TestGrid1D:
         VX, EToV = meshgen1d(xl, xr, n_elements)
         grid = Grid1D(VX, EToV, degree, lambda x: np.zeros_like(x))
         dt = grid.get_time_step()
-        assert np.isclose(dt, 0.00596831)
+        assert np.isclose(dt, 0.00029913769)
 
 
 class TestCreateElements2D:

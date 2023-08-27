@@ -146,7 +146,7 @@ class Grid1D(Grid):
 
     def get_time_step(self) -> float:
         x = self.nodes
-        xmin = np.min(np.abs(x[0] - x[1]))
+        xmin = np.min(np.abs(x[:, 0] - x[:, 1]))
         CFL = 0.75
         dt = xmin * CFL / (4 * np.pi)
         return dt
