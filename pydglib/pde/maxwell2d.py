@@ -10,7 +10,6 @@ from pydglib.operators import (
     DerivativeOperatorDG2D,
 )
 from pydglib.element import Element2D
-from pydglib.utils.nodes import get_nodes_1d
 
 
 def compute_gradients(element: Element2D, do: DerivativeOperator2D, LIFT):
@@ -69,21 +68,6 @@ def MaxwellRHS2D(grid: Grid2D, time, do, LIFT):
         element.update_gradients(dHxdt, dHydt, dEzdt)
 
 
-def get_time_step(grid: Grid2D) -> float:
-    # TODO: Move to abstract method on Grid
-    rLGL = get_nodes_1d(grid.degree)
-    rmin = abs(rLGL[0] - rLGL[1])
-
-    dtscale = np.zeros(len(grid.elements))
-    for i, element in enumerate(grid.elements):
-        inscribed_radius = 2 * element.area / element.perimeter
-        dtscale[i] = inscribed_radius
-
-    dt = np.min(dtscale) * rmin * 2 / 3
-
-    return dt
-
-
 def solve(x0, x1, y0, y1, IC, final_time, n_elements, degree):
     nx = int(np.sqrt(n_elements / 2))
     ny = int((n_elements / 2) / nx)
@@ -97,7 +81,7 @@ def solve(x0, x1, y0, y1, IC, final_time, n_elements, degree):
 
     x = grid.nodes
 
-    dt = get_time_step(grid)
+    dt = grid.get_time_step()
 
     sol = odeint(
         MaxwellRHS2D,

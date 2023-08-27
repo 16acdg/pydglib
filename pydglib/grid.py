@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Tuple, Callable, List, Union
 import numpy as np
 
@@ -8,7 +8,7 @@ from pydglib.element import (
     Element2D,
     InitialConditions,
 )
-from pydglib.utils.nodes import get_nodes_2d
+from pydglib.utils.nodes import get_nodes_1d, get_nodes_2d
 from .boundary_type import BoundaryType
 
 
@@ -81,6 +81,11 @@ class Grid(ABC):
             out[i] = element.state
         return out
 
+    @abstractmethod
+    def get_time_step(self) -> float:
+        """Returns an appropriate time step for the given grid."""
+        pass
+
 
 class Grid1D(Grid):
     def __init__(
@@ -152,6 +157,9 @@ class Grid1D(Grid):
             prev_el = self.elements[el_index]
             next_v_index = self.EToV[el_index, 1]
             k += 1
+
+    def get_time_step(self) -> float:
+        raise NotImplementedError()
 
 
 def create_elements_2d(degree, VX, VY, EToV, IC) -> List[Element2D]:
@@ -275,3 +283,16 @@ class Grid2D(Grid):
 
         # Create graph of elements (ie set references between adjacent elements)
         connect_elements_2d(self.elements, self.EToV)
+
+    def get_time_step(self) -> float:
+        r = get_nodes_1d(self.degree)
+        rmin = abs(r[0] - r[1])
+
+        dtscale = np.zeros(len(self.elements))
+        for i, element in enumerate(self.elements):
+            inscribed_radius = 2 * element.area / element.perimeter
+            dtscale[i] = inscribed_radius
+
+        dt = np.min(dtscale) * rmin * 2 / 3
+
+        return dt

@@ -466,3 +466,13 @@ class TestGrid2D:
         assert arr.shape[0] == n_elements
         assert arr.shape[1] == n_nodes
         assert arr[5, 4] == 1
+
+    def test_get_time_step(self):
+        x0 = y0 = -1
+        x1 = y1 = 1
+        nx = ny = 8
+        degree = 10
+        VX, VY, EToV = meshgen2d(x0, x1, y0, y1, nx, ny)
+        grid = Grid2D(VX, VY, EToV, degree, lambda x: np.zeros(x.shape[0]))
+        dt = grid.get_time_step()
+        assert np.isclose(dt, 0.0032217555)
