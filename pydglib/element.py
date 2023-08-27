@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Callable, Tuple, List, Union
 import numpy as np
 
+from .boundary_type import BoundaryType
 from .utils.nodes import get_nodes_1d, get_nodes_2d
 from .utils.transformations import (
     computational_to_physical_1d,
@@ -185,6 +186,10 @@ class Element2DInterface:
     pass
 
 
+class ElementEdge2D:
+    pass
+
+
 class ElementGeometry2D:
     def __init__(self, v1: np.ndarray, v2: np.ndarray, v3: np.ndarray):
         self.vertices = [v1, v2, v3]
@@ -264,7 +269,18 @@ class Element2D(Element):
         self._geometry = ElementGeometry2D(v1, v2, v3)
 
         # Boundaries either save reference to an adjacent element or None, if edge is a physical boundary.
-        self.edges: List[Element2DInterface | None] = [None, None, None]
+        # self.edges: List[Element2DInterface | None] = [None, None, None]
+        self.n_faces = 3
+        self.edges = [
+            ElementEdge2D(
+                i,
+                self._state_container,
+                self._geometry,
+                self.nodes,
+                self._edge_node_indices[i],
+            )
+            for i in range(self.n_faces)
+        ]
 
     @property
     def area(self) -> float:
@@ -302,100 +318,84 @@ class Element2D(Element):
     def Fscale(self) -> np.ndarray:
         return self._geometry.Fscale
 
-    def get_edge_nodes(self, edge: int) -> np.ndarray:
-        assert edge in [0, 1, 2]
-        return self.nodes[self._edge_node_indices[edge]]
 
-    def get_edge(self, edge: int) -> np.ndarray:
-        """Returns the state of this element on the specified edge."""
-        assert edge in [0, 1, 2]
-        return self.state[self._edge_node_indices[edge]]
+class ElementEdge2D:
+    """
+    This class represents one of 3 straight edges of an Element2D instance.
 
+    This class provides an API for accessing variables related to this edge.
+    All ElementEdge2D instances are assumed to have counterclockwise orientation, meaning that all nodes and states are returned in this order.
 
-class Element2DInterface:
+    Attributes:
+        index (int): Local id of this edge within an Element2D instance (either 0, 1, or 2).
+        is_boundary (bool): True if this edge is a physical boundary, False otherwise.
+        boundary_type (BoundaryType | None): If this edge is a physical boundary, then this is the type of physical boundary.
+        n_nodes (int): The number of nodes along this edge. For an Element2D instance with degree of local polynomial approximation `d`, `n_nodes = d + 1`.
+        nodes (np.ndarray): The nodes that are on this edge, in counterclockwise orientation.
+        state (np.ndarray): The nodal values along this edge, in counterclockwise orientation.
+        external_state (np.ndarray): The nodal values at nodes of an element adjacent to this edge, in counterclockwise orientation.
+        normal (np.ndarray): The outward unit normal vector to this edge.
+    """
+
     def __init__(
         self,
-        interior_element: Element2D,
-        exterior_element: Element2D,
-        interior_edge: int,
-        exterior_edge: int,
+        index: int,
+        state: ElementStateContainer,
+        geometry: ElementGeometry2D,
+        nodes: np.ndarray,
+        edge_node_indices: np.ndarray,
+        boundary_type: BoundaryType = None,
     ):
         """
-        Create an Element2DInterface instance.
+        Creates a new ElementEdge2D.
+
+        This class represents one of the 3 edges of a 2d triangular element.
+        This class keeps a reference to the neighbouring element along this edge, if such an element exists, and provides an API to access it.
 
         Args:
-            interior_element (Element2D): Reference to the interior element.
-            exterior_element (Element2D): Reference to the neighbouring element.
-            interior_edge ([0, 1, 2]): Interior element's local ID for the edge at this interface.
-            exterior_edge ([0, 1, 2]): Neighbour's local ID for the edge at this interface.
+            index (int): Parent Element2D's local id for this edge. Must be in [0, 1, 2].
+            state (ElementStateContainer): Reference to the parent Element2D's state container.
+            geometry (ElementGeometry2D): Reference to the parent Element2D's geometry.
+            nodes (np.ndarray): Parent element's nodes.
+            edge_node_indices (np.ndarray): 1d array of indices in `nodes` that are on this edge, in counterclockwise orientation.
+            boundary_type (BoundaryType, optional): If this edge is a physical boundary, this is the type of physical boundary. Defaults to None.
         """
-        assert interior_edge in [0, 1, 2]
-        assert exterior_edge in [0, 1, 2]
+        self.index = index
+        self._state = state
+        self._geometry = geometry
+        self._nodes = nodes
+        self._edge_node_indices = edge_node_indices
+        self.is_boundary: bool = boundary_type is not None
+        self.boundary_type: BoundaryType | None = boundary_type
+        self._neighbour: ElementEdge2D | None = None
 
-        self.interior_element = interior_element
-        self.exterior_element = exterior_element
-        self.interior_edge = interior_edge
-        self.exterior_edge = exterior_edge
+    @property
+    def n_nodes(self) -> int:
+        """Number of nodes along this edge."""
+        return self._nodes.shape[0]
 
-        self._node_map = self._create_node_map()
+    @property
+    def nodes(self) -> np.ndarray:
+        """Returns the nodes along this edge, in counterclockwise orientation."""
+        return self._nodes[self._edge_node_indices]
 
-    @staticmethod
-    def _create_node_map_for_interface(
-        interior_nodes: np.ndarray,
-        interior_node_indices: np.ndarray,
-        exterior_nodes: np.ndarray,
-        exterior_node_indices: np.ndarray,
-    ) -> np.ndarray:
-        """
-        Creates a 2d numpy array that maps indicies of interior nodes to the index of the closest exterior node.
-        """
-        n_nodes = interior_nodes.shape[0]
-        node_map = np.zeros((n_nodes, 2), dtype=np.int32)
-        node_map[:, 0] = interior_node_indices
+    @property
+    def state(self) -> np.ndarray:
+        """Returns the state of the nodes along this edge, in counterclockwise orientation."""
+        return self._state.state[self._edge_node_indices]
 
-        # Create matrix of distances between all nodes on boundary
-        distances = np.zeros((n_nodes, n_nodes))
-        for i in range(n_nodes):
-            for j in range(n_nodes):
-                distances[i, j] = np.linalg.norm(interior_nodes[i] - exterior_nodes[j])
+    @property
+    def external_state(self) -> np.ndarray:
+        """Returns the state of the neighbouring element, if such an element exists, in counterclockwise orientation."""
+        if self._neighbour is None:
+            raise Exception("No element is adjacent to this element along this edge.")
 
-        # Match interior nodes with closest exterior node
-        closest = np.argmin(distances, axis=1)
-        node_map[:, 1] = exterior_node_indices[closest]
+        # NOTE: Because all Element2Ds are assumed to be oriented counterclockwise, the state along any neighbouring edge will be backwards, so flip it.
+        return np.flip(self._neighbour.state, axis=0)
 
-        return node_map
-
-    def _create_node_map(self) -> np.ndarray:
-        """
-        Creates 2d numpy array that maps nodes that pairs adjacent nodes from neighbouring elements.
-
-        First dimension is the number of nodes along a boundary. Second dimension equals 2.
-        First column contains the local indicies of the nodes that appear along the interior of the interface.
-        Second column contains the local indicies of the neighbour's nodes that appear along the exterior of the interface.
-        The two indicies that appear in the same row correspond with nodes that are adjacent.
-
-        Returns:
-            np.ndarray: Node map as a 2d numpy array.
-        """
-        i_nodes = self.interior_element.get_edge_nodes(self.interior_edge)
-        e_nodes = self.exterior_element.get_edge_nodes(self.exterior_edge)
-
-        i_node_indicies = self.interior_element._edge_node_indices[self.interior_edge]
-        e_node_indicies = self.exterior_element._edge_node_indices[self.exterior_edge]
-
-        node_map = Element2DInterface._create_node_map_for_interface(
-            i_nodes, i_node_indicies, e_nodes, e_node_indicies
-        )
-
-        return node_map
-
-    def get_external_state(self) -> np.ndarray:
-        node_indices = self._node_map[:, 1]
-        return self.exterior_element.state[node_indices]
-
-    def get_internal_state(self) -> np.ndarray:
-        node_indices = self._node_map[:, 0]
-        return self.exterior_element.state[node_indices]
+    @property
+    def normal(self) -> np.ndarray:
+        return self._geometry.normals[self.index]
 
 
 def get_reference_triangle(degree: int) -> Element2D:

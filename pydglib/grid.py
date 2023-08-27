@@ -6,10 +6,10 @@ from pydglib.element import (
     Element,
     Element1D,
     Element2D,
-    Element2DInterface,
     InitialConditions,
 )
 from pydglib.utils.nodes import get_nodes_2d
+from .boundary_type import BoundaryType
 
 
 class Grid(ABC):
@@ -182,7 +182,7 @@ def create_elements_2d(degree, VX, VY, EToV, IC) -> List[Element2D]:
     return elements
 
 
-def _get_index_of_adjacent_element(element_index, vi, vf, EToV) -> Tuple[int, int]:
+def _get_adjacent_element(element_index, vi, vf, EToV) -> Tuple[int, int]:
     """
     Returns the global element index and local face index of an adjacent element.
 
@@ -224,33 +224,24 @@ def connect_elements_2d(elements: List[Element2D], EToV: np.ndarray):
         EToV (np.ndarray): Element to vertex map.
     """
     for i, element in enumerate(elements):
-        # Get global vertex numbers for element i
+        # Extract global vertex numbers for element i
         v1, v2, v3 = EToV[i]
 
-        edges = [(v1, v2), (v2, v3), (v3, v1)]
-
-        for j, edge in enumerate(edges):
-            # Get id of element that is adjacent to the current edge.
-            # Also get the local id of the adjacent element's edge.
-            ext_element_idx, ext_edge_idx = _get_index_of_adjacent_element(
-                i, edge[0], edge[1], EToV
-            )
+        for edge, (vi, vf) in zip(element.edges, [(v1, v2), (v2, v3), (v3, v1)]):
+            ext_element_idx, ext_edge_idx = _get_adjacent_element(i, vi, vf, EToV)
             edge_is_physical_boundary = ext_element_idx == -1
 
-            if not edge_is_physical_boundary:
-                ext_element = elements[ext_element_idx]
+            if edge_is_physical_boundary:
+                edge.is_boundary = True
+                edge.boundary_type = (
+                    BoundaryType.DIRICHLET
+                )  # TODO: Set this based on a new argument to this function
+            else:
+                # Get reference to exterior element (ie the element along the current edge)
+                exterior_element = elements[ext_element_idx]
 
-                # Create Element2DInterface instance for the interior element's edge
-                if element.edges[j] is None:
-                    element.edges[j] = Element2DInterface(
-                        element, ext_element, j, ext_edge_idx
-                    )
-
-                # Create Element2DInterface instance for the exterior element's edge
-                if ext_element.edges[ext_edge_idx] is None:
-                    ext_element.edges[ext_edge_idx] = Element2DInterface(
-                        ext_element, element, ext_edge_idx, j
-                    )
+                # Save reference to the exterior element's edge that coincides with the current edge
+                edge._neighbour = exterior_element.edges[ext_edge_idx]
 
 
 class Grid2D(Grid):

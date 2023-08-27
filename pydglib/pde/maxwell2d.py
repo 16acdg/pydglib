@@ -59,32 +59,31 @@ def Grad2D(
 
 def compute_gradients(element: Element2D, LIFT, Dr, Ds):
     n_edge_nodes = element.degree + 1
-    n_nodes = element.n_nodes
 
     # Extract state variables
     Hx = element.state[:, 0]
     Hy = element.state[:, 1]
     Ez = element.state[:, 2]
 
-    fluxHx = np.zeros((3, n_edge_nodes))
-    fluxHy = np.zeros((3, n_edge_nodes))
-    fluxEz = np.zeros((3, n_edge_nodes))
+    fluxHx = np.zeros((element.n_faces, n_edge_nodes))
+    fluxHy = np.zeros((element.n_faces, n_edge_nodes))
+    fluxEz = np.zeros((element.n_faces, n_edge_nodes))
 
     # Define field differences at faces
     for i, edge in enumerate(element.edges):
-        if edge is None:  # physical boundary
+        if edge.is_boundary:
             dHx = np.zeros(n_edge_nodes)
             dHy = np.zeros(n_edge_nodes)
-            dEz = 2 * element.get_edge(i)[:, 2]
+            dEz = 2 * edge.state[:, 2]
         else:
-            internal_state = element.get_edge(i)
-            external_state = edge.get_external_state()
+            internal_state = edge.state
+            external_state = edge.external_state
             dHx = internal_state[:, 0] - external_state[:, 0]
             dHy = internal_state[:, 1] - external_state[:, 1]
             dEz = internal_state[:, 2] - external_state[:, 2]
 
         # Evaluate upwind fluxes
-        nx, ny = element.normals[i]
+        nx, ny = edge.normal
         ndotdH = nx * dHx + ny * dHy
         fluxHx[i] = element.Fscale[i] * (ny * dEz + nx * ndotdH - dHx)
         fluxHy[i] = element.Fscale[i] * (-nx * dEz + ny * ndotdH - dHy)

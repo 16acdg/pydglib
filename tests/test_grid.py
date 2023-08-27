@@ -1,7 +1,8 @@
+from typing import List
 import numpy as np
 
 from pydglib.grid import Grid1D, create_elements_2d, connect_elements_2d, Grid2D
-from pydglib.element import Element1D, Element2D, Element2DInterface
+from pydglib.element import Element1D, Element2D, Element2DInterface, ElementEdge2D
 from pydglib.mesh import meshgen1d, meshgen2d
 
 from .data import load
@@ -283,7 +284,7 @@ class TestCreateElements2D:
         elements = create_elements_2d(degree, VX, VY, EToV, IC)
         for element in elements:
             for edge in element.edges:
-                assert edge is None
+                assert edge._neighbour is None
 
     def test_elements_have_correct_vertices(self):
         degree = 2
@@ -301,7 +302,7 @@ class TestCreateElements2D:
 
 
 class TestConnectGrid2D:
-    def test_sets_all_edges_to_None_or_Element2DInterface(self):
+    def create_and_connect_elements(self) -> List[Element2D]:
         x1 = y1 = 0
         x2 = y2 = 1
         nx = ny = 3
@@ -310,10 +311,41 @@ class TestConnectGrid2D:
         IC = lambda x: np.ones(x.shape[0])
         elements = create_elements_2d(degree, VX, VY, EToV, IC)
         connect_elements_2d(elements, EToV)
+        return elements
+
+    def test_neighbour_exists_if_is_not_boundary(self):
+        elements = self.create_and_connect_elements()
         for element in elements:
             for edge in element.edges:
-                edge_is_boundary = edge is None
-                assert edge_is_boundary or isinstance(edge, Element2DInterface)
+                if not edge.is_boundary:
+                    assert isinstance(edge._neighbour, ElementEdge2D)
+
+    def test_edge_not_boundary_if_neighbour_exists(self):
+        elements = self.create_and_connect_elements()
+        for element in elements:
+            for edge in element.edges:
+                if isinstance(edge._neighbour, ElementEdge2D):
+                    assert not edge.is_boundary
+
+    def test_edge_is_boundary_if_boundary_type_exists(self):
+        elements = self.create_and_connect_elements()
+        for element in elements:
+            for edge in element.edges:
+                if edge.boundary_type is not None:
+                    assert edge.is_boundary
+
+    def test_boundary_type_exists_if_edge_is_boundary(self):
+        elements = self.create_and_connect_elements()
+        for element in elements:
+            for edge in element.edges:
+                if edge.is_boundary:
+                    assert edge.boundary_type is not None
+
+    def test_all_edges_are_either_boundary_or_interior(self):
+        elements = self.create_and_connect_elements()
+        for element in elements:
+            for edge in element.edges:
+                assert edge.is_boundary or isinstance(edge._neighbour, ElementEdge2D)
 
     def test_correctly_connects_two_right_angled_triangles_forming_a_square(self):
         degree = 2
@@ -324,28 +356,26 @@ class TestConnectGrid2D:
         elements = create_elements_2d(degree, VX, VY, EToV, IC)
         connect_elements_2d(elements, EToV)
 
-        assert elements[0].edges[0] is None
-        assert isinstance(elements[0].edges[1], Element2DInterface)
-        assert elements[0].edges[2] is None
-        assert elements[1].edges[0] is None
-        assert elements[1].edges[1] is None
-        assert isinstance(elements[1].edges[2], Element2DInterface)
+        assert elements[0].edges[0].is_boundary
+        assert not elements[0].edges[1].is_boundary
+        assert elements[0].edges[2].is_boundary
+        assert elements[1].edges[0].is_boundary
+        assert elements[1].edges[1].is_boundary
+        assert not elements[1].edges[2].is_boundary
 
-        assert elements[0].edges[1].exterior_element == elements[1]
-        assert elements[0].edges[1].exterior_edge == 2
-        assert elements[1].edges[2].exterior_element == elements[0]
-        assert elements[1].edges[2].exterior_edge == 1
+        assert elements[0].edges[1]._neighbour == elements[1].edges[2]
+        assert elements[1].edges[2]._neighbour == elements[0].edges[1]
 
-        interior_nodes = elements[0].edges[1]._node_map[:, 0]
-        exterior_nodes = elements[0].edges[1]._node_map[:, 1]
-        for i, j in zip(interior_nodes, exterior_nodes):
-            distance = np.linalg.norm(elements[0].nodes[i] - elements[1].nodes[j])
+        interior_nodes = elements[0].edges[1].nodes
+        exterior_nodes = np.flip(elements[1].edges[2].nodes, axis=0)
+        for i in range(degree + 1):
+            distance = np.linalg.norm(interior_nodes[i] - exterior_nodes[i])
             assert np.isclose(distance, 0)
 
-        interior_nodes = elements[1].edges[2]._node_map[:, 0]
-        exterior_nodes = elements[1].edges[2]._node_map[:, 1]
-        for i, j in zip(interior_nodes, exterior_nodes):
-            distance = np.linalg.norm(elements[1].nodes[i] - elements[0].nodes[j])
+        interior_nodes = elements[1].edges[2].nodes
+        exterior_nodes = np.flip(elements[0].edges[1].nodes, axis=0)
+        for i in range(degree + 1):
+            distance = np.linalg.norm(interior_nodes[i] - exterior_nodes[i])
             assert np.isclose(distance, 0)
 
     def test_correct_number_of_physical_boundaries_are_set_for_square_domain(self):
@@ -358,7 +388,7 @@ class TestConnectGrid2D:
         n_physical_boundaries = 0
         for element in elements:
             for edge in element.edges:
-                if edge is None:
+                if edge.is_boundary:
                     n_physical_boundaries += 1
         assert n_physical_boundaries == 2 * nx + 2 * ny
 
