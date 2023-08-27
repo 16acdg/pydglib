@@ -87,79 +87,69 @@ class Grid(ABC):
         pass
 
 
+def create_elements_1d(
+    degree: int, VX: np.ndarray, EToV: np.ndarray, IC: InitialConditions
+) -> List[Element1D]:
+    elements = []
+    n_nodes = degree + 1
+    n_elements = EToV.shape[0]
+    for i in range(n_elements):
+        xl = VX[i]
+        xr = VX[i + 1]
+        element = Element1D(i, n_nodes, xl, xr, IC)
+        elements.append(element)
+    return elements
+
+
+def connect_elements_1d(elements: List[Element1D], EToV: np.ndarray):
+    k = 1
+    el_index = np.where(EToV[:, 0] == 0)[0][0]
+    next_v_index = EToV[el_index, 1]
+    prev_el = elements[el_index]
+    while k < len(elements):
+        el_index = np.where(EToV[:, 0] == next_v_index)[0][0]
+        elements[el_index].left = prev_el
+        prev_el.right = elements[el_index]
+        prev_el = elements[el_index]
+        next_v_index = EToV[el_index, 1]
+        k += 1
+
+
 class Grid1D(Grid):
     def __init__(
         self,
         VX: np.ndarray,
         EToV: np.ndarray,
-        n_nodes: int,
+        degree: int,
         IC: InitialConditions,
-        dtype=np.float64,
     ):
         """
         Creates a new Grid1D instance.
 
-        The state of the grid is stored in elements that are attached to this grid.
-        The grid assumes the state of all elements is 1D if `IC` is functions.
-        If instead `IC` is a List of functions, then it is assumed that each function is for a different
-        dimension of the state, and hence the dimension of the state is assumed to be `len(IC)`.
-
         Args:
             VX (np.ndarray): Positions of vertices in the physical domain.
             EToV (np.ndarray): Element-to-vertex map.
-            n_nodes (int): Number of nodes per element.
+            degree (int): Degree of the local polynomial approximation.
             IC (InitialConditions): Initial conditions for state.
-            dtype (np.dtype, optional): Data type of the state. Defaults to np.float64.
         """
-        assert isinstance(VX, np.ndarray)
-        assert isinstance(EToV, np.ndarray)
-        assert isinstance(n_nodes, int) and n_nodes > 0
-        assert len(VX.shape) == 1
-        assert len(EToV.shape) == 2
-        assert VX.shape[0] == EToV.shape[0] + 1
-        assert EToV.shape[1] == 2
-        # Assume VX is given in increasing order
-        for i in range(VX.size - 1):
-            assert VX[i] < VX[i + 1]
-
-        # Create elements
-        elements: List[Element1D] = []
-        n_elements = EToV.shape[0]
-        for k in range(n_elements):
-            xl = VX[k]
-            xr = VX[k + 1]
-            element = Element1D(k, n_nodes, xl, xr, IC, dtype=dtype)
-            elements.append(element)
+        elements = create_elements_1d(degree, VX, EToV, IC)
 
         super().__init__(elements, 1)
 
         self.xl = VX[0]
         self.xr = VX[-1]
-        self.dtype = dtype
-        self.VX = VX
-        self.EToV = EToV
-        self.IC = IC
+        self.VX = VX  # TODO: Keep as instance attribute?
+        self.EToV = EToV  # TODO: Remove as instance attribute
+        self.IC = IC  # TODO: Remove as instance attribute
 
-        self._create_references_between_elements()
-
-    def _create_references_between_elements(self):
-        """
-        Sets left and right pointers of elements that are adjacent in the `self.elements` list.
-        """
-        k = 1
-        el_index = np.where(self.EToV[:, 0] == 0)[0][0]
-        next_v_index = self.EToV[el_index, 1]
-        prev_el = self.elements[el_index]
-        while k < self.n_elements:
-            el_index = np.where(self.EToV[:, 0] == next_v_index)[0][0]
-            self.elements[el_index].left = prev_el
-            prev_el.right = self.elements[el_index]
-            prev_el = self.elements[el_index]
-            next_v_index = self.EToV[el_index, 1]
-            k += 1
+        connect_elements_1d(self.elements, self.EToV)
 
     def get_time_step(self) -> float:
-        raise NotImplementedError()
+        x = self.nodes
+        xmin = np.min(np.abs(x[0] - x[1]))
+        CFL = 0.75
+        dt = xmin * CFL / (4 * np.pi)
+        return dt
 
 
 def create_elements_2d(degree, VX, VY, EToV, IC) -> List[Element2D]:

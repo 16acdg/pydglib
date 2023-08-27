@@ -13,20 +13,20 @@ class TestGrid1D:
         xl = 0
         xr = 1
         n_elements = 3
-        n_nodes = 4
+        degree = 4
         VX, EToV = meshgen1d(xl, xr, n_elements)
         IC = lambda x: np.zeros_like(x)
-        grid = Grid1D(VX, EToV, n_nodes, IC)
+        grid = Grid1D(VX, EToV, degree, IC)
         assert grid.n_elements == n_elements
 
     def test_xl_and_xr_are_set(self):
         xl = 0
         xr = 1.25
         n_elements = 5
-        n_nodes = 4
+        degree = 4
         VX, EToV = meshgen1d(xl, xr, n_elements)
         IC = lambda x: np.zeros_like(x)
-        grid = Grid1D(VX, EToV, n_nodes, IC)
+        grid = Grid1D(VX, EToV, degree, IC)
         assert grid.xl == xl
         assert grid.xr == xr
 
@@ -34,38 +34,38 @@ class TestGrid1D:
         xl = 0
         xr = 1.25
         n_elements = 5
-        n_nodes = 4
+        degree = 3
         VX, EToV = meshgen1d(xl, xr, n_elements)
         IC = lambda x: np.zeros_like(x)
-        grid = Grid1D(VX, EToV, n_nodes, IC)
+        grid = Grid1D(VX, EToV, degree, IC)
         assert grid.state_dimension == 1
 
     def test_state_dimension_set_correctly_multid(self):
         xl = 0
         xr = 1.25
         n_elements = 5
-        n_nodes = 4
+        degree = 3
         VX, EToV = meshgen1d(xl, xr, n_elements)
         ICs = [
             lambda x: 0 * np.ones_like(x),
             lambda x: 1 * np.ones_like(x),
             lambda x: 2 * np.ones_like(x),
         ]
-        grid = Grid1D(VX, EToV, n_nodes, ICs)
+        grid = Grid1D(VX, EToV, degree, ICs)
         assert grid.state_dimension == len(ICs)
 
     def test_elements_are_created(self):
         xl = 0
         xr = 1.25
         n_elements = 5
-        n_nodes = 4
+        degree = 3
         VX, EToV = meshgen1d(xl, xr, n_elements)
         ICs = [
             lambda x: 0 * np.ones_like(x),
             lambda x: 1 * np.ones_like(x),
             lambda x: 2 * np.ones_like(x),
         ]
-        grid = Grid1D(VX, EToV, n_nodes, ICs)
+        grid = Grid1D(VX, EToV, degree, ICs)
         assert len(grid.elements) == n_elements
         for element in grid.elements:
             assert isinstance(element, Element1D)
@@ -78,33 +78,29 @@ class TestGrid1D:
         xl = 1.2
         xr = 1.25
         n_elements = 4
-        n_nodes = 4
-        VX = np.linspace(xl, xr, n_elements + 1)
-        EToV = np.zeros((n_elements, 2))
-        for i in range(n_elements):
-            EToV[i, 0] = i
-            EToV[i, 1] = i + 1
+        degree = 3
+        VX, EToV = meshgen1d(xl, xr, n_elements)
         IC = lambda x: np.ones_like(x)
-        grid = Grid1D(VX, EToV, n_nodes, IC)
+        grid = Grid1D(VX, EToV, degree, IC)
 
         assert grid.elements[0].left is None
+
         for i in range(n_elements - 1):
             assert grid.elements[i] == grid.elements[i + 1].left
             assert grid.elements[i].right == grid.elements[i + 1]
+
         assert grid.elements[-1].right is None
 
     def test_nodes_property_returns_matrix_of_all_elements_nodes(self):
         xl = 0.1
         xr = 0.9
         n_elements = 4
-        n_nodes = 3
-        VX = np.linspace(xl, xr, n_elements + 1)
-        EToV = np.zeros((n_elements, 2))
-        for i in range(n_elements):
-            EToV[i, 0] = i
-            EToV[i, 1] = i + 1
+        degree = 2
+        n_nodes = degree + 1
+        VX, EToV = meshgen1d(xl, xr, n_elements)
         IC = lambda x: np.zeros_like(x)
-        grid = Grid1D(VX, EToV, n_nodes, IC)
+        grid = Grid1D(VX, EToV, degree, IC)
+
         assert isinstance(grid.nodes, np.ndarray)
         assert len(grid.nodes.shape) == 2
         assert grid.nodes.shape[0] == n_elements
@@ -116,14 +112,11 @@ class TestGrid1D:
         xl = 0.1
         xr = 0.9
         n_elements = 4
-        n_nodes = 3
-        VX = np.linspace(xl, xr, n_elements + 1)
-        EToV = np.zeros((n_elements, 2))
-        for i in range(n_elements):
-            EToV[i, 0] = i
-            EToV[i, 1] = i + 1
+        degree = 2
+        n_nodes = degree + 1
+        VX, EToV = meshgen1d(xl, xr, n_elements)
         IC = lambda _: np.linspace(10, 12, n_nodes)
-        grid = Grid1D(VX, EToV, n_nodes, IC)
+        grid = Grid1D(VX, EToV, degree, IC)
 
         assert isinstance(grid.state, np.ndarray)
         assert len(grid.state.shape) == 2
@@ -136,17 +129,14 @@ class TestGrid1D:
         xl = 0.1
         xr = 0.9
         n_elements = 4
-        n_nodes = 3
-        VX = np.linspace(xl, xr, n_elements + 1)
-        EToV = np.zeros((n_elements, 2))
-        for i in range(n_elements):
-            EToV[i, 0] = i
-            EToV[i, 1] = i + 1
+        degree = 2
+        n_nodes = degree + 1
+        VX, EToV = meshgen1d(xl, xr, n_elements)
         ICs = [
             lambda _: np.linspace(9, 10, n_nodes),
             lambda _: np.linspace(99, 100, n_nodes),
         ]
-        grid = Grid1D(VX, EToV, n_nodes, ICs)
+        grid = Grid1D(VX, EToV, degree, ICs)
 
         assert isinstance(grid.state, np.ndarray)
         assert len(grid.state.shape) == 3
@@ -161,14 +151,11 @@ class TestGrid1D:
         xl = 0.1
         xr = 0.9
         n_elements = 3
-        n_nodes = 7
-        VX = np.linspace(xl, xr, n_elements + 1)
-        EToV = np.zeros((n_elements, 2))
-        for i in range(n_elements):
-            EToV[i, 0] = i
-            EToV[i, 1] = i + 1
+        degree = 6
+        n_nodes = degree + 1
+        VX, EToV = meshgen1d(xl, xr, n_elements)
         IC = lambda x: np.zeros_like(x)
-        grid = Grid1D(VX, EToV, n_nodes, IC)
+        grid = Grid1D(VX, EToV, degree, IC)
 
         assert isinstance(grid.grad, np.ndarray)
         assert len(grid.grad.shape) == 2
@@ -181,17 +168,14 @@ class TestGrid1D:
         xl = 0.1
         xr = 0.9
         n_elements = 2
-        n_nodes = 3
-        VX = np.linspace(xl, xr, n_elements + 1)
-        EToV = np.zeros((n_elements, 2))
-        for i in range(n_elements):
-            EToV[i, 0] = i
-            EToV[i, 1] = i + 1
+        degree = 2
+        n_nodes = degree + 1
+        VX, EToV = meshgen1d(xl, xr, n_elements)
         ICs = [
             lambda _: np.linspace(9, 10, n_nodes),
             lambda _: np.linspace(99, 100, n_nodes),
         ]
-        grid = Grid1D(VX, EToV, n_nodes, ICs)
+        grid = Grid1D(VX, EToV, degree, ICs)
 
         assert isinstance(grid.grad, np.ndarray)
         assert len(grid.grad.shape) == 3
@@ -206,10 +190,11 @@ class TestGrid1D:
         xl = 0.1
         xr = 0.9
         n_elements = 4
-        n_nodes = 3
+        degree = 2
+        n_nodes = degree + 1
         VX, EToV = meshgen1d(xl, xr, n_elements)
         IC = lambda _: np.linspace(9, 10, n_nodes)
-        grid = Grid1D(VX, EToV, n_nodes, IC)
+        grid = Grid1D(VX, EToV, degree, IC)
         assert len(grid.shape) == 2
         assert grid.shape[0] == n_elements
         assert grid.shape[1] == n_nodes
@@ -218,13 +203,14 @@ class TestGrid1D:
         xl = 0.1
         xr = 0.9
         n_elements = 4
-        n_nodes = 3
+        degree = 2
+        n_nodes = degree + 1
         VX, EToV = meshgen1d(xl, xr, n_elements)
         ICs = [
             lambda _: np.linspace(9, 10, n_nodes),
             lambda _: np.linspace(99, 100, n_nodes),
         ]
-        grid = Grid1D(VX, EToV, n_nodes, ICs)
+        grid = Grid1D(VX, EToV, degree, ICs)
         assert len(grid.shape) == 3
         assert grid.shape[0] == n_elements
         assert grid.shape[1] == n_nodes
@@ -234,10 +220,11 @@ class TestGrid1D:
         xl = 0.1
         xr = 0.9
         n_elements = 5
-        n_nodes = 3
+        degree = 2
+        n_nodes = degree + 1
         VX, EToV = meshgen1d(xl, xr, n_elements)
         IC = lambda _: np.linspace(3, 100, n_nodes)
-        grid = Grid1D(VX, EToV, n_nodes, IC)
+        grid = Grid1D(VX, EToV, degree, IC)
         array = np.array(grid)
         assert isinstance(array, np.ndarray)
         assert array.shape == grid.state.shape
@@ -247,17 +234,27 @@ class TestGrid1D:
         xl = 0.1
         xr = 0.9
         n_elements = 2
-        n_nodes = 3
+        degree = 2
+        n_nodes = degree + 1
         VX, EToV = meshgen1d(xl, xr, n_elements)
         ICs = [
             lambda _: np.linspace(9, 10, n_nodes),
             lambda _: np.linspace(99, 100, n_nodes),
         ]
-        grid = Grid1D(VX, EToV, n_nodes, ICs)
+        grid = Grid1D(VX, EToV, degree, ICs)
         array = np.array(grid)
         assert isinstance(array, np.ndarray)
         assert array.shape == grid.state.shape
         assert np.allclose(array, grid.state)
+
+    def test_get_time_step(self):
+        xl, xr = 0, 1
+        n_elements = 10
+        degree = 8
+        VX, EToV = meshgen1d(xl, xr, n_elements)
+        grid = Grid1D(VX, EToV, degree, lambda x: np.zeros_like(x))
+        dt = grid.get_time_step()
+        assert np.isclose(dt, 0.00596831)
 
 
 class TestCreateElements2D:

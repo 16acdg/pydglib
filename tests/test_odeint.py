@@ -14,10 +14,11 @@ def test_odeint_returns_3d_numpy_array_when_state_is_1d():
     xl = 0
     xr = 1
     n_elements = 3
-    n_nodes = 4
+    degree = 3
+    n_nodes = degree + 1
     IC = lambda x: np.zeros_like(x)
     VX, EToV = meshgen1d(xl, xr, n_elements)
-    grid = Grid1D(VX, EToV, n_nodes, IC)
+    grid = Grid1D(VX, EToV, degree, IC)
 
     final_time = 1
     dt = 0.01
@@ -33,13 +34,14 @@ def test_odeint_returns_4d_numpy_array_when_state_is_2d():
     xl = 0
     xr = 1
     n_elements = 3
-    n_nodes = 4
+    degree = 3
+    n_nodes = degree + 1
     ICs = [
         lambda x: np.zeros_like(x),
         lambda x: np.zeros_like(x),
     ]
     VX, EToV = meshgen1d(xl, xr, n_elements)
-    grid = Grid1D(VX, EToV, n_nodes, ICs)
+    grid = Grid1D(VX, EToV, degree, ICs)
 
     final_time = 1
     dt = 0.01
@@ -77,9 +79,8 @@ def test_odeint_solves_1d_pendulum_system():
 
     VX = np.array([0, 1])
     EToV = np.array([[0, 1]])
-    n_nodes = 2
     IC = lambda _: y0
-    grid = Grid1D(VX, EToV, n_nodes, IC)
+    grid = Grid1D(VX, EToV, 1, IC)
     soln = odeint(pend1d, grid, final_time, dt, args=(b, c))[:, 0, :]
 
     assert scipy_soln.shape == soln.shape
@@ -111,12 +112,11 @@ def test_odeint_solves_multid_pendulum_system():
 
     VX = np.array([0, 1])
     EToV = np.array([[0, 1]])
-    n_nodes = 2
     ICs = [
         lambda _: y0,
         lambda _: y0,
     ]
-    grid = Grid1D(VX, EToV, n_nodes, ICs)
+    grid = Grid1D(VX, EToV, 1, ICs)
     soln = odeint(pend2d, grid, final_time, dt, args=(b0, c0, b1, c1))[:, 0, :, :]
 
     assert np.allclose(scipy_soln0, soln[:, :, 0], atol=1e-3, rtol=0)
