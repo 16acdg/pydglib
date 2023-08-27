@@ -372,7 +372,7 @@ class ElementEdge2D:
     @property
     def n_nodes(self) -> int:
         """Number of nodes along this edge."""
-        return self._nodes.shape[0]
+        return len(self._edge_node_indices)
 
     @property
     def nodes(self) -> np.ndarray:

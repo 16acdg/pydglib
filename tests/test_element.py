@@ -645,12 +645,20 @@ class TestElement2D:
         assert np.allclose(
             element1.edges[2].state, np.array([[11, 12], [7, 8], [1, 2]])
         )
-        assert np.allclose(element1.edges[1].external_state, np.array([[1, 2], [7, 8], [11, 12]]))
+        assert np.allclose(
+            element1.edges[1].external_state, np.array([[1, 2], [7, 8], [11, 12]])
+        )
 
         assert np.allclose(element2.edges[0].state, np.array([[1, 2], [3, 4], [5, 6]]))
-        assert np.allclose(element2.edges[1].state, np.array([[5, 6], [9, 10], [11, 12]]))
-        assert np.allclose(element2.edges[2].state, np.array([[11, 12], [7, 8], [1, 2]]))
-        assert np.allclose(element2.edges[2].external_state, np.array([[11, 12], [9, 10], [5, 6]]))
+        assert np.allclose(
+            element2.edges[1].state, np.array([[5, 6], [9, 10], [11, 12]])
+        )
+        assert np.allclose(
+            element2.edges[2].state, np.array([[11, 12], [7, 8], [1, 2]])
+        )
+        assert np.allclose(
+            element2.edges[2].external_state, np.array([[11, 12], [9, 10], [5, 6]])
+        )
 
     def test_doesnt_call_get_nodes_when_nodes_are_supplied_in_constructor(
         self, monkeypatch
@@ -707,3 +715,13 @@ class TestElement2D:
         assert len(element.Fscale) == 3
         for f in element.Fscale:
             assert np.isscalar(f)
+
+    def test_edges_give_correct_number_of_nodes_via_n_nodes_attribute(self):
+        degree = 3
+        v1 = np.array([0, 0])
+        v2 = np.array([1, 0])
+        v3 = np.array([1, 1])
+        element = Element2D(degree, v1, v2, v3, lambda x: np.zeros(x.shape[0]))
+        assert element.edges[0].n_nodes == degree + 1
+        assert element.edges[1].n_nodes == degree + 1
+        assert element.edges[2].n_nodes == degree + 1
