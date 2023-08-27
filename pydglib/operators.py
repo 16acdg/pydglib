@@ -248,6 +248,64 @@ def get_LIFT_2d(degree: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     return LIFT
 
 
+class DerivativeOperator1D(ABC):
+    def __init__(self, degree: int):
+        """
+        Creates a new DerivativeOperator1D instance.
+
+        Args:
+            degree (int): Degree of the local polynomial approximation used by all elements in a grid.
+        """
+        self.degree = degree
+
+    @abstractmethod
+    def _get_Dr_for_element(self, element: Element1D) -> np.ndarray:
+        """
+        Returns the derivative operator Dr for the given element.
+
+        Args:
+            element (Element1D): Returns derivative operator specific to this element.
+
+        Returns:
+            np.ndarray: The derivative operator `Dr` for the r coordinate in computational space as a 2d array.
+        """
+        pass
+
+    def __call__(self, u: np.ndarray, element: Element1D) -> np.ndarray:
+        """
+        Takes the pointwise derivatives of the state vector `u` wrt the physical dimension.
+
+        Args:
+            u (np.ndarray): State vector as a 1d numpy array, ordered in increasing value of x.
+            element (Element1D): Element whose state is u.
+
+        Returns:
+            np.ndarray: 1d numpy array of state vector's derivative wrt the physical dimension.
+        """
+        Dr = self._get_Dr_for_element(element)
+
+        ur = Dr @ u
+
+        ux = element.rx * ur
+
+        return ux
+
+
+class DerivativeOperatorDG1D(DerivativeOperator1D):
+    def __init__(self, degree: int):
+        """
+        Creates a new DerivativeOperator2D instance.
+
+        Args:
+            degree (int): Degree of the local polynomial approximation used by all elements in a grid.
+        """
+        self.degree = degree
+        self._Dr = get_derivative_operator_1d(degree)
+
+    def _get_Dr_for_element(self, _) -> np.ndarray:
+        return self._Dr
+
+
 class DerivativeOperator2D(ABC):
     def __init__(self, degree: int):
         """
