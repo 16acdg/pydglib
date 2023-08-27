@@ -146,33 +146,30 @@ class TestGetEdgeMassMatrices2D:
 
 
 class TestGetLIFT2D:
-    def test_returns_numpy_array(self):
+    def test_returns_3_numpy_arrays(self):
         degree = 5
         n_nodes = int(0.5 * (degree + 1) * (degree + 2))
         n_edge_nodes = degree + 1
         LIFT = get_LIFT_2d(degree)
-        assert isinstance(LIFT, np.ndarray)
-        assert len(LIFT.shape) == 2
-        assert LIFT.shape[0] == n_nodes
-        assert LIFT.shape[1] == 3 * n_edge_nodes
+        assert len(LIFT) == 3
+        for i in range(3):
+            assert isinstance(LIFT[i], np.ndarray)
+            assert len(LIFT[i].shape) == 2
+            assert LIFT[i].shape[0] == n_nodes  # output dimension of matrix
+            assert LIFT[i].shape[1] == n_edge_nodes  # input dimension of matrix
 
-    def test_returns_correct_array_for_degree_2(self):
+    def test_returns_correct_arrays_for_degree_2(self):
         degree = 2
         LIFT = get_LIFT_2d(degree)
-        LIFT_actual = np.array(
-            [
-                [4.5, 2, -0.5, 1, 4, 1, -0.5, 2, 4.5],
-                [0.5, 5, 0.5, -0.625, -1.5, 0.625, 0.625, -1.5, -0.625],
-                [-0.5, 2, 4.5, 4.5, 2, -0.5, 1, 4, 1],
-                [-0.625, -1.5, 0.625, 0.625, -1.5, -0.625, 0.5, 5, 0.5],
-                [0.625, -1.5, -0.625, 0.5, 5, 0.5, -0.625, -1.5, 0.625],
-                [1, 4, 1, -0.5, 2, 4.5, 4.5, 2, -0.5],
-            ]
-        )
-        assert np.allclose(LIFT, LIFT_actual)
+        temp = load("LIFT_2d_degree_2.npy")
+        LIFT_actual = [temp[:, :3], temp[:, 3:6], temp[:, 6:]]
+        for i in range(3):
+            assert np.allclose(LIFT[i], LIFT_actual[i])
 
     def test_returns_correct_array_for_degree_10(self):
         degree = 10
         LIFT = get_LIFT_2d(degree)
-        LIFT_actual = load("LIFT_2d_degree_10.npy")
-        assert np.allclose(LIFT_actual, LIFT)
+        temp = load("LIFT_2d_degree_10.npy")
+        LIFT_actual = [temp[:, :11], temp[:, 11:22], temp[:, 22:]]
+        for i in range(3):
+            assert np.allclose(LIFT[i], LIFT_actual[i])

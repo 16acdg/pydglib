@@ -229,7 +229,7 @@ def get_edge_mass_matrix_2d(degree: int) -> Tuple[np.ndarray, np.ndarray, np.nda
     return M
 
 
-def get_LIFT_2d(degree: int) -> np.ndarray:
+def get_LIFT_2d(degree: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     n_nodes = int(0.5 * (degree + 1) * (degree + 2))
     n_edge_nodes = degree + 1
 
@@ -237,14 +237,13 @@ def get_LIFT_2d(degree: int) -> np.ndarray:
     V = Vandermonde2D(degree, nodes[:, 0], nodes[:, 1])
     M_inv = V @ V.T
 
-    Emat = np.zeros((n_nodes, 3 * n_edge_nodes))
+    Emat = [np.zeros((n_nodes, n_edge_nodes)) for _ in range(3)]
     M_edge = get_edge_mass_matrix_2d(degree)
 
-    Emat[edge_node_indices[0], :n_edge_nodes] = M_edge
-    Emat[edge_node_indices[1], n_edge_nodes : 2 * n_edge_nodes] = M_edge
-    Emat[edge_node_indices[2], 2 * n_edge_nodes :] = M_edge
+    for i in range(3):
+        Emat[i][edge_node_indices[i]] = M_edge
 
-    LIFT = M_inv @ Emat
+    LIFT = [M_inv @ E for E in Emat]
 
     return LIFT
 

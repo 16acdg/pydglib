@@ -1,5 +1,4 @@
 import numpy as np
-from typing import Tuple
 
 from pydglib.grid import Grid2D
 from pydglib.mesh import meshgen2d
@@ -12,23 +11,15 @@ from pydglib.operators import (
 from pydglib.element import Element2D
 
 
-def compute_gradients(element: Element2D, do: DerivativeOperator2D, LIFT):
-    n_edge_nodes = element.degree + 1
+def compute_surface_terms(element: Element2D, LIFT):
+    surfaceHx = np.zeros((element.n_faces, element.n_nodes))
+    surfaceHy = np.zeros((element.n_faces, element.n_nodes))
+    surfaceEz = np.zeros((element.n_faces, element.n_nodes))
 
-    # Extract state variables
-    Hx = element.state[:, 0]
-    Hy = element.state[:, 1]
-    Ez = element.state[:, 2]
-
-    fluxHx = np.zeros((element.n_faces, n_edge_nodes))
-    fluxHy = np.zeros((element.n_faces, n_edge_nodes))
-    fluxEz = np.zeros((element.n_faces, n_edge_nodes))
-
-    # Define field differences at faces
     for i, edge in enumerate(element.edges):
         if edge.is_boundary:
-            dHx = np.zeros(n_edge_nodes)
-            dHy = np.zeros(n_edge_nodes)
+            dHx = np.zeros(edge.n_nodes)
+            dHy = np.zeros(edge.n_nodes)
             dEz = 2 * edge.state[:, 2]
         else:
             internal_state = edge.state
@@ -40,23 +31,38 @@ def compute_gradients(element: Element2D, do: DerivativeOperator2D, LIFT):
         # Evaluate upwind fluxes
         nx, ny = edge.normal
         ndotdH = nx * dHx + ny * dHy
-        fluxHx[i] = element.Fscale[i] * (ny * dEz + nx * ndotdH - dHx)
-        fluxHy[i] = element.Fscale[i] * (-nx * dEz + ny * ndotdH - dHy)
-        fluxEz[i] = element.Fscale[i] * (-nx * dHy + ny * dHx - dEz)
+        fluxHx = element.Fscale[i] * (ny * dEz + nx * ndotdH - dHx) / 2
+        fluxHy = element.Fscale[i] * (-nx * dEz + ny * ndotdH - dHy) / 2
+        fluxEz = element.Fscale[i] * (-nx * dHy + ny * dHx - dEz) / 2
+
+        surfaceHx[i] = LIFT[i] @ fluxHx
+        surfaceHy[i] = LIFT[i] @ fluxHy
+        surfaceEz[i] = LIFT[i] @ fluxEz
+
+    # Sum contributions from all 3 faces
+    surfaceHx = np.sum(surfaceHx, axis=0)
+    surfaceHy = np.sum(surfaceHy, axis=0)
+    surfaceEz = np.sum(surfaceEz, axis=0)
+
+    return surfaceHx, surfaceHy, surfaceEz
+
+
+def compute_gradients(element: Element2D, do: DerivativeOperator2D, LIFT):
+    # Extract state variables
+    Hx = element.state[:, 0]
+    Hy = element.state[:, 1]
+    Ez = element.state[:, 2]
+
+    surfaceHx, surfaceHy, surfaceEz = compute_surface_terms(element, LIFT)
 
     # local derivatives of fields
     Ezx, Ezy = do.grad(Ez, element)
     CuHz = do.curl(Hx, Hy, element)
 
-    # Reshape flux vectors
-    fluxHx = fluxHx.reshape(-1)
-    fluxHy = fluxHy.reshape(-1)
-    fluxEz = fluxEz.reshape(-1)
-
     # compute right hand sides of the PDE’s
-    rhsHx = -Ezy + LIFT @ fluxHx / 2
-    rhsHy = Ezx + LIFT @ fluxHy / 2
-    rhsEz = CuHz + LIFT @ fluxEz / 2
+    rhsHx = -Ezy + surfaceHx
+    rhsHy = Ezx + surfaceHy
+    rhsEz = CuHz + surfaceEz
 
     return rhsHx, rhsHy, rhsEz
 
