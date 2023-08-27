@@ -4,60 +4,16 @@ from typing import Tuple
 from pydglib.grid import Grid2D
 from pydglib.mesh import meshgen2d
 from pydglib.odeint import odeint
-from pydglib.operators import get_derivative_operators_2d, get_LIFT_2d
+from pydglib.operators import (
+    get_LIFT_2d,
+    DerivativeOperator2D,
+    DerivativeOperatorDG2D,
+)
 from pydglib.element import Element2D
 from pydglib.utils.nodes import get_nodes_1d
 
 
-def Curl2D(
-    ux: np.ndarray,
-    uy: np.ndarray,
-    uz: np.ndarray,
-    rx: float,
-    sx: float,
-    ry: float,
-    sy: float,
-    Dr,
-    Ds,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Compute the 2D curl-operator in the x-y plane.
-    """
-    uxr = Dr @ ux
-    uxs = Ds @ ux
-    uyr = Dr @ uy
-    uys = Ds @ uy
-
-    vz = rx * uyr + sx * uys - ry * uxr - sy * uxs
-
-    if len(uz) > 0:
-        uzr = Dr @ uz
-        uzs = Ds @ uz
-        vx = ry * uzr + sy * uzs
-        vy = -rx * uzr - sx * uzs
-    else:
-        vx = []
-        vy = []
-
-    return vx, vy, vz
-
-
-def Grad2D(
-    u: np.ndarray, rx: float, sx: float, ry: float, sy: float, Dr, Ds
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Returns the gradient [ux, uy] of the scalar field u.
-    """
-    ur = Dr @ u
-    us = Ds @ u
-
-    ux = rx * ur + sx * us
-    uy = ry * ur + sy * us
-
-    return ux, uy
-
-
-def compute_gradients(element: Element2D, LIFT, Dr, Ds):
+def compute_gradients(element: Element2D, do: DerivativeOperator2D, LIFT):
     n_edge_nodes = element.degree + 1
 
     # Extract state variables
@@ -90,10 +46,8 @@ def compute_gradients(element: Element2D, LIFT, Dr, Ds):
         fluxEz[i] = element.Fscale[i] * (-nx * dHy + ny * dHx - dEz)
 
     # local derivatives of fields
-    Ezx, Ezy = Grad2D(Ez, element.rx, element.sx, element.ry, element.sy, Dr, Ds)
-    _, _, CuHz = Curl2D(
-        Hx, Hy, [], element.rx, element.sx, element.ry, element.sy, Dr, Ds
-    )
+    Ezx, Ezy = do.grad(Ez, element)
+    CuHz = do.curl(Hx, Hy, element)
 
     # Reshape flux vectors
     fluxHx = fluxHx.reshape(-1)
@@ -108,13 +62,15 @@ def compute_gradients(element: Element2D, LIFT, Dr, Ds):
     return rhsHx, rhsHy, rhsEz
 
 
-def MaxwellRHS2D(grid: Grid2D, time, Dr, Ds, LIFT):
+def MaxwellRHS2D(grid: Grid2D, time, do, LIFT):
     for element in grid.elements:
-        dHxdt, dHydt, dEzdt = compute_gradients(element, LIFT, Dr, Ds)
+        dHxdt, dHydt, dEzdt = compute_gradients(element, do, LIFT)
+
         element.update_gradients(dHxdt, dHydt, dEzdt)
 
 
 def get_time_step(grid: Grid2D) -> float:
+    # TODO: Move to abstract method on Grid
     rLGL = get_nodes_1d(grid.degree)
     rmin = abs(rLGL[0] - rLGL[1])
 
@@ -134,7 +90,7 @@ def solve(x0, x1, y0, y1, IC, final_time, n_elements, degree):
 
     VX, VY, EToV = meshgen2d(x0, x1, y0, y1, nx, ny)
 
-    Dr, Ds = get_derivative_operators_2d(degree)
+    do = DerivativeOperatorDG2D(degree)
     LIFT = get_LIFT_2d(degree)
 
     grid = Grid2D(VX, VY, EToV, degree, IC)
@@ -148,7 +104,7 @@ def solve(x0, x1, y0, y1, IC, final_time, n_elements, degree):
         grid,
         final_time,
         dt,
-        args=(Dr, Ds, LIFT),
+        args=(do, LIFT),
     )
 
     return sol, x

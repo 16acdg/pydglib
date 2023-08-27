@@ -1,5 +1,7 @@
+from abc import ABC, abstractmethod
 from typing import List, Callable, Tuple
 import numpy as np
+from pydglib.element import Element2D
 
 from pydglib.utils.nodes import get_nodes_1d, get_nodes_2d
 from pydglib.utils.polynomials import (
@@ -9,6 +11,7 @@ from pydglib.utils.polynomials import (
     legendre_deriv,
     Polynomial,
 )
+from .element import Element1D, Element2D
 
 
 def _get_orthonormal_poly_basis_1d(
@@ -244,3 +247,106 @@ def get_LIFT_2d(degree: int) -> np.ndarray:
     LIFT = M_inv @ Emat
 
     return LIFT
+
+
+class DerivativeOperator2D(ABC):
+    def __init__(self, degree: int):
+        """
+        Creates a new DerivativeOperator2D instance.
+
+        Args:
+            degree (int): Degree of the local polynomial approximation used by all elements in a grid.
+        """
+        self.degree = degree
+
+    @abstractmethod
+    def _get_Dr_and_Ds_for_element(
+        self, element: Element2D
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Returns the derivative operators Dr and Ds for the given element.
+
+        Args:
+            element (Element2D): Returns derivative operators specific to this element.
+
+        Returns:
+            np.ndarray: The derivative operator `Dr` for the r coordinate in computational space as a 2d array.
+            np.ndarray: The derivative operator `Ds` for the s coordinate in computational space as a 2d array.
+        """
+        pass
+
+    def grad(self, u: np.ndarray, element: Element2D) -> np.ndarray:
+        """
+        Computes the gradient of the state variable `u` for the element `element`.
+
+        Args:
+            u (np.ndarray): 1d state vector for a single component of the `element`'s state.
+            element (Element2D): Element who has the state `u`.
+
+        Returns:
+            np.ndarray: The gradient of the vector `u` as a 1d numpy array.
+        """
+        Dr, Ds = self._get_Dr_and_Ds_for_element(element)
+
+        ur = Dr @ u
+        us = Ds @ u
+
+        ux = element.rx * ur + element.sx * us
+        uy = element.ry * ur + element.sy * us
+
+        return ux, uy
+
+    def curl(self, u: np.ndarray, v: np.ndarray, element: Element2D) -> np.ndarray:
+        """
+        Compute the 2d curl operator in the x-y plane.
+
+        Args:
+            u (np.ndarray): x component of state as a 1d numpy array.
+            v (np.ndarray): y component of state as a 1d numpy array.
+
+        Returns:
+            np.ndarray: The curl of the 2d vector field (`ux`, `uy`) in the z direction as a 1d numpy array.
+        """
+        Dr, Ds = self._get_Dr_and_Ds_for_element(element)
+
+        ur = Dr @ u
+        us = Ds @ u
+        vr = Dr @ v
+        vs = Ds @ v
+
+        vz = element.rx * vr + element.sx * vs - element.ry * ur - element.sy * us
+
+        return vz
+
+    def div(self, u: np.ndarray, v: np.ndarray, element: Element2D) -> np.ndarray:
+        """
+        Computes the divergence of the 2d vector field (`u`, `v`).
+
+        Args:
+            u (np.ndarray): First components of the vector field to get divergence of, as a 1d numpy array.
+            v (np.ndarray): Second components of the vector field to get diviergence of, as a 1d numpy array.
+            element (Element2D): The element who has state `u` and `v`.
+
+        Returns:
+            np.ndarray: The 1d numpy array `out`, where `out`[i] is the divergence of the 2d vector field (`u`[i], `v`[i]).
+        """
+        Dr, Ds = self._get_Dr_and_Ds_for_element(element)
+
+        ur = Dr @ u
+        us = Ds @ u
+        vr = Dr @ v
+        vs = Ds @ v
+
+        ux = element.rx * ur + element.sx * us
+        vy = element.ry * vr + element.sy * vs
+
+        return ux + vy
+
+
+class DerivativeOperatorDG2D(DerivativeOperator2D):
+    def __init__(self, degree: int):
+        super().__init__(degree)
+        self._Dr, self._Ds = get_derivative_operators_2d(self.degree)
+
+    def _get_Dr_and_Ds_for_element(self, _) -> Tuple[np.ndarray, np.ndarray]:
+        return self._Dr, self._Ds
