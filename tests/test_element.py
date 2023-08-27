@@ -330,16 +330,16 @@ class TestElement1D:
         xr = 1
         IC = lambda x: 2 * np.ones_like(x)
         element = Element1D(0, n_nodes, xl, xr, IC)
-        assert not element.is_leftmost()
+        assert not element.is_leftmost
 
         element.right = Element1D(1, n_nodes, xl, xr, IC)
-        assert element.is_leftmost()
+        assert element.is_leftmost
 
         element.left = Element1D(2, n_nodes, xl, xr, IC)
-        assert not element.is_leftmost()
+        assert not element.is_leftmost
 
         element.right = None
-        assert not element.is_leftmost()
+        assert not element.is_leftmost
 
     def test_is_rightmost(self):
         n_nodes = 3
@@ -347,16 +347,16 @@ class TestElement1D:
         xr = 1
         IC = lambda x: 2 * np.ones_like(x)
         element = Element1D(0, n_nodes, xl, xr, IC)
-        assert not element.is_rightmost()
+        assert not element.is_rightmost
 
         element.left = Element1D(1, n_nodes, xl, xr, IC)
-        assert element.is_rightmost()
+        assert element.is_rightmost
 
         element.right = Element1D(2, n_nodes, xl, xr, IC)
-        assert not element.is_rightmost()
+        assert not element.is_rightmost
 
         element.left = None
-        assert not element.is_rightmost()
+        assert not element.is_rightmost
 
 
 class TestElementGeometry2D:

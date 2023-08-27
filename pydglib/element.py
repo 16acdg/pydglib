@@ -173,11 +173,18 @@ class Element1D(Element):
 
     @property
     def h(self) -> float:
+        """Returns the length of this element"""
         return self.xr - self.xl
 
+    @property
+    def rx(self) -> float:
+        return 2 / self.h
+
+    @property
     def is_leftmost(self) -> bool:
         return self.left is None and self.right is not None
 
+    @property
     def is_rightmost(self) -> bool:
         return self.left is not None and self.right is None
 
