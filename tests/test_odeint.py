@@ -121,3 +121,26 @@ def test_odeint_solves_multid_pendulum_system():
 
     assert np.allclose(scipy_soln0, soln[:, :, 0], atol=1e-3, rtol=0)
     assert np.allclose(scipy_soln1, soln[:, :, 1], atol=1e-3, rtol=0)
+
+
+def test_odeint_returns_time_derivatives_if_cache_time_derivatives_is_True():
+    b = 0.25
+    c = 5.0
+    y0 = np.array([np.pi - 0.1, 0.0])
+    final_time = 10
+    dt = 0.1
+    t = np.linspace(0, 10, int(final_time / dt) + 1)
+
+    VX = np.array([0, 1])
+    EToV = np.array([[0, 1]])
+    IC = lambda _: y0
+    grid = Grid1D(VX, EToV, 1, IC)
+    soln, dudt = odeint(
+        pend1d, grid, final_time, dt, args=(b, c), cache_time_derivatives=True
+    )
+
+    assert isinstance(dudt, np.ndarray)
+    assert len(dudt.shape) == 3
+    assert dudt.shape[0] == soln.shape[0] - 1
+    assert dudt.shape[1] == soln.shape[1]
+    assert dudt.shape[2] == soln.shape[2]

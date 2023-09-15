@@ -30,8 +30,13 @@ rk4c = [
 
 
 def odeint(
-    sys: Callable, grid: Grid, final_time: float, dt: float, args: Tuple[any] = ()
-) -> np.ndarray:
+    sys: Callable,
+    grid: Grid,
+    final_time: float,
+    dt: float,
+    args: Tuple[any] = (),
+    cache_time_derivatives: bool = False,
+) -> np.ndarray | Tuple[np.ndarray, np.ndarray]:
     """
     Integrates the ODE system dy/dt = sys(y,t).
 
@@ -42,7 +47,8 @@ def odeint(
         grid (Grid): Grid on which to compute and update solution
         final_time (float): Time to integrate until.
         dt (float): Time step.
-        args (Tuple[any], optional): Arguments to pass to sys. Defaults to ().
+        args (Tuple[any], optional): Arguments to pass to `sys`. Defaults to ().
+        cache_time_derivatives (bool, optional): If True, this function will also return time derivatives for each time step. Defaults to False.
 
     Returns:
         np.ndarray: 3d or 4d numpy array of the solution at each time step.
@@ -61,7 +67,10 @@ def odeint(
     # Save initial conditions to solution array
     soln[0] = grid.state
 
-    # outer time loop
+    # Storage for time derivatives
+    if cache_time_derivatives:
+        dudt = np.zeros((nt, *grid.shape))
+
     for tstep in tqdm(range(1, nt + 1)):
         # Shrink the final time step to match the time interval
         if 0 < final_time - (dt * (tstep - 1)) < dt:
@@ -73,6 +82,10 @@ def odeint(
             # Update gradients
             sys(grid, time_local, *args)
 
+            # Cache time derivatives on first RK4 step
+            if cache_time_derivatives and INTRK == 0:
+                dudt[tstep - 1] = grid.grad
+
             # Update state
             for k, u in enumerate(grid.elements):
                 resu[k] = rk4a[INTRK] * resu[k] + dt * u.grad
@@ -80,5 +93,8 @@ def odeint(
 
         time += dt
         soln[tstep] = grid.state
+
+    if cache_time_derivatives:
+        return soln, dudt
 
     return soln
